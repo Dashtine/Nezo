@@ -1,0 +1,14 @@
+{
+  "users": {
+    "j<kpqismuggle": {
+      "contracts": 2,
+      "takeProfit": 20,
+      "stopLoss": 10
+    },
+    "pinkstaroo": {
+      "contracts": 1,
+      "takeProfit": 15,
+      "stopLoss": 7
+    }
+  }
+}

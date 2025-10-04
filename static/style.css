@@ -1,0 +1,138 @@
+body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background: linear-gradient(to right, #ece9e6, #ffffff);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+}
+
+h1 {
+    margin-bottom: 20px;
+    font-size: 2.5em;
+    color: #333;
+}
+
+button {
+    padding: 15px 30px;
+    font-size: 18px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    margin: 10px 0;
+}
+
+.start {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.stop {
+    background-color: #f44336;
+    color: white;
+}
+
+button:hover {
+    opacity: 0.9;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+}
+
+#status {
+    margin-top: 10px;
+    font-size: 16px;
+    color: #666;
+}
+
+#logs {
+    width: 80%;
+    max-width: 800px;
+    height: 200px;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    padding: 15px;
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    overflow-y: auto;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    font-size: 14px;
+    color: #333;
+}
+
+.form-container {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    max-width: 800px;
+}
+
+.form-group {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 15px;
+    width: 100%;
+}
+
+.form-group label {
+    font-size: 1.1em;
+    color: #333;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 10px;
+}
+
+
+.save {
+    background-color: #007BFF;
+    color: white;
+    margin-top: 7px;
+    padding: 10px 20px;
+    font-size: 16px;
+}
+
+.input-wrapper {
+    position: relative;
+    flex: 2;
+    margin-top: 8px;
+}
+
+.input-wrapper input {
+    padding: 10px;
+    font-size: 1em;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    width: 75%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-sizing: border-box;
+    padding-right: 20px; /* Add padding to the right for the % symbol */
+}
+
+.input-symbol {
+    position: absolute;
+    right: 43px;
+    top: 40%;
+    transform: translateY(-50%);
+    font-size: 1em;
+    color: #666;
+}
+
+#loginOverlay {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(to right, #ece9e6, #ffffff);
+  z-index: 9999;
+}
+#loginOverlay input {
+  padding: 10px;
+  font-size: 16px;
+}
+#loginOverlay button {
+  margin-left: 10px;
+}
