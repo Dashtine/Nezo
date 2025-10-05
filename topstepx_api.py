@@ -53,17 +53,35 @@ def has_open_position(account_id):
     return len(positions) > 0
 
 
-# Return list of accounts available for this user
-def get_accounts():
+# Verify and grab the account id
+def get_account(token):
+    """Return list of accounts for the authenticated user."""
     url = f"{BASE_URL}/api/Account/search"
-    resp = requests.post(url, headers=_headers(), json={"onlyActiveAccounts": True})
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "accept": "application/json",
+        "Content-Type": "application/json"
+    }
+
+    payload = {"onlyActiveAccounts": True}
+
+    resp = requests.post(url, headers=headers, json=payload)
     resp.raise_for_status()
     return resp.json()
 
-# Return all available contracts
-def get_contracts():
+# Verify and get contract id
+def get_contract(token):
+    """Return all available contracts for the user."""
     url = f"{BASE_URL}/api/Contract/available"
-    resp = requests.post(url, headers=_headers(), json={"live": True})
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "accept": "application/json",
+        "Content-Type": "application/json"
+    }
+
+    payload = {"live": False}
+
+    resp = requests.post(url, headers=headers, json=payload)
     resp.raise_for_status()
     return resp.json()
 

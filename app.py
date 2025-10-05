@@ -3,7 +3,7 @@ import os
 import pytz
 from flask import Flask, request, jsonify, render_template, Response, send_from_directory
 from datetime import datetime, timezone, timedelta
-from topstepx_api import ACC_ID, CONTRACT_ID, place_order, get_accounts, get_contracts, has_open_position, generate_token
+from topstepx_api import ACC_ID, CONTRACT_ID, place_order, get_account, get_account, get_contract, has_open_position, generate_token
 
 app = Flask(__name__)
 
@@ -167,6 +167,141 @@ def check_token():
         "expiry": expiry_display,
         "message": f"Session is good for 24 hours. You must validate again before {expiry_display}."
     }), 200
+
+
+@app.route('/set_account', methods=['POST'])
+def set_account():
+    data = request.get_json()
+    username = data.get("username")
+    account_name = data.get("account")
+    print("set_account", account_name)
+    if not username or not account_name:
+        return jsonify({"error": "Username and account name required"}), 400
+
+    reload_config()
+    if username not in config["users"]:
+        return jsonify({"error": "Unauthorized user"}), 403
+
+    user_data = config["users"][username]
+    token = user_data.get("token")
+
+    if not token:
+        return jsonify({"error": "No valid token. Please validate your API key first."}), 400
+
+    try:
+        accounts_data = get_account(token)
+        # Expecting something like {"accounts": [{"name": "Demo Account", "id": "1234"}, ...]}
+        accounts = accounts_data.get("accounts", [])
+        found = next((a for a in accounts if a.get("name", "").lower() == account_name.lower()), None)
+
+        if found:
+            account_id = found.get("id") or found.get("accountId") or found.get("account_id")
+            user_data["account"] = account_name
+            user_data["accountId"] = account_id
+            save_config(config)
+            log_message(f"Account set for {username}: {account_name} ({account_id})")
+            return jsonify({
+                "status": "ok",
+                "account": account_name,
+                "accountId": account_id
+            })
+        else:
+            user_data["account"] = account_name
+            user_data["accountId"] = "Invalid"
+            save_config(config)
+            log_message(f"Invalid account for {username}: {account_name}")
+            return jsonify({
+                "status": "error",
+                "error": f"Account '{account_name}' not found",
+                "accountId": "Invalid"
+            })
+
+    except Exception as e:
+        user_data["account"] = account_name
+        user_data["accountId"] = "Invalid"
+        save_config(config)
+        log_message(f"Error fetching account for {username}: {e}")
+        return jsonify({"error": str(e), "accountId": "Invalid"}), 500
+
+
+@app.route('/set_contract', methods=['POST'])
+def set_contract():
+    data = request.get_json()
+    username = data.get("username")
+    user_input = data.get("symbol", "").strip().upper()
+
+    if not username or not user_input:
+        return jsonify({"error": "Username and contract name required"}), 400
+
+    reload_config()
+    if username not in config["users"]:
+        return jsonify({"error": "Unauthorized user"}), 403
+
+    user_data = config["users"][username]
+    token = user_data.get("token")
+
+    if not token:
+        return jsonify({"error": "No valid token. Please validate your API key first."}), 400
+
+    try:
+        contract_data = get_contract(token)
+        contracts = contract_data.get("contracts", [])
+
+        # --- Normalize search ---
+        # Example: if user types MNQZ25, alt is MNQZ5; if they type MNQZ5, alt is MNQZ25
+        alt_input = user_input
+        if len(user_input) >= 3 and user_input[-2:].isdigit():
+            # ends with two digits (e.g. MNQZ25)
+            alt_input = user_input[:-2] + user_input[-1]
+        elif len(user_input) >= 2 and user_input[-1].isdigit():
+            # ends with one digit (e.g. MNQZ5)
+            alt_input = user_input[:-1] + "2" + user_input[-1]  # append likely decade marker (guess 2020s)
+
+        # --- Match either version ---
+        found = next(
+            (c for c in contracts if c.get("name", "").upper() in [user_input, alt_input]),
+            None
+        )
+
+        if found:
+            contract_id = found.get("id")
+            contract_desc = found.get("description", "")
+            actual_name = found.get("name")
+
+            user_data["contractName"] = actual_name
+            user_data["contractId"] = contract_id
+            user_data["contractDesc"] = contract_desc
+            save_config(config)
+
+            log_message(f"Contract set for {username}: {actual_name} ({contract_id}) - {contract_desc}")
+
+            return jsonify({
+                "status": "ok",
+                "contractName": actual_name,
+                "contractId": contract_id,
+                "description": contract_desc
+            })
+        else:
+            user_data["contractName"] = user_input
+            user_data["contractId"] = "Invalid"
+            user_data["contractDesc"] = ""
+            save_config(config)
+            log_message(f"Invalid contract for {username}: {user_input}")
+
+            return jsonify({
+                "status": "error",
+                "error": f"Contract '{user_input}' not found",
+                "contractId": "Invalid"
+            })
+
+    except Exception as e:
+        user_data["contractName"] = user_input
+        user_data["contractId"] = "Invalid"
+        user_data["contractDesc"] = ""
+        save_config(config)
+        log_message(f"Error fetching contract for {username}: {e}")
+        return jsonify({"error": str(e), "contractId": "Invalid"}), 500
+    
 
 # Places a market short order
 @app.route('/test_short', methods=['POST'])

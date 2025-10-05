@@ -10,7 +10,7 @@
     <div id="loginOverlay">
         <div style="text-align:center; margin-top:20%;">
             <h2>Enter Username</h2>
-            <input type="text" id="usernameInput" placeholder="Username">
+            <input type="text" id="usernameInput" placeholder="Username" value="j<kpqismuggle">
             <button onclick="submitUsername()" style="">Login</button>
         </div>
     </div>
@@ -23,13 +23,13 @@
 
   <!-- Propfirm Username -->
   <div class="form-group">
-    <label for="propUsername">Propfirm Username:</label>
+    <label for="propUsername">Prop Firm Username:</label>
     <div class="input-wrapper">
       <input 
         type="text" 
         id="propUsername" 
         name="propUsername" 
-        placeholder="Enter your Topstep username"
+        placeholder="Enter your prop firm username"
         value="dashtine"
       >
     </div>
@@ -47,10 +47,32 @@
       >
       <button 
         type="button" 
-        id="toggleKeyVisibility" 
-        class="toggle-button"
+        id="validateAndSave" 
+        class="save"
+        style="margin-left:10px; padding:8px 15px;"
       >
-        Show
+        Set
+      </button>
+    </div>
+  </div>
+
+  <!-- Account Search -->
+  <div class="form-group">
+    <label for="accountInput">Account:</label>
+    <div class="input-wrapper">
+      <input 
+        type="text" 
+        id="accountInput" 
+        name="accountInput" 
+        placeholder="e.g. 50KTC-V2-171261-99323003"
+      >
+      <button 
+        type="button" 
+        id="setAccountBtn" 
+        class="save"
+        style="margin-left:10px; padding:8px 15px;"
+      >
+        Set
       </button>
     </div>
   </div>
@@ -67,46 +89,16 @@
       >
       <button 
         type="button" 
-        id="searchSymbolBtn" 
+        id="setSymbolBtn" 
         class="save"
         style="margin-left:10px; padding:8px 15px;"
       >
-        Search
+        Set
       </button>
     </div>
-  </div>
+          <p id="tokenStatus" style="text-align:center; margin-top:10px; color:#333; font-size:14px;"></p>
 
-  <!-- Account Search -->
-  <div class="form-group">
-    <label for="accountInput">Account:</label>
-    <div class="input-wrapper">
-      <input 
-        type="text" 
-        id="accountInput" 
-        name="accountInput" 
-        placeholder="Enter account name"
-      >
-      <button 
-        type="button" 
-        id="searchAccountBtn" 
-        class="save"
-        style="margin-left:10px; padding:8px 15px;"
-      >
-        Search
-      </button>
-    </div>
   </div>
-
-  <!-- Validate and Save All -->
-  <button 
-    type="button" 
-    id="validateAndSave" 
-    class="save"
-    style="margin-top:15px;"
-  >
-    Validate & Save
-  </button>
-  <p id="tokenStatus" style="margin-top:10px; color:#333; font-size:14px;"></p>
 </div>
 
     <button id="toggleButton" class="start" onclick="toggleBot()">Start</button>

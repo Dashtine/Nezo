@@ -1,37 +1,6 @@
 let isRunning = false;
 let currentUser = null;
 
-// THIS ONE IS FOR TESTING SO I DONT GOTTA KEEP PUTTING IN THE USERNAME
-// function submitUsername() {
-//     const name = 'j<kpqismuggle';
-//     if (!name) {
-//         denyAccess("Unauthorized user. Access denied.");
-//         return;
-//     }
- 
-//     // fetch(`/get_settings?username=${name}`)
-//     fetch(`/get_settings?username=j<kpqismuggle`)
-//       .then(res => {
-//         if (res.status === 403) {
-//             denyAccess("Unauthorized user. Access denied.");
-//             throw new Error("Unauthorized");
-//         }
-//         return res.json();
-//       })
-//       .then(data => {
-//         currentUser = 'j<kpqismuggle';
-//         // currentUser = name;
-//         document.getElementById('contracts').value = data.contracts;
-//         document.getElementById('takeProfit').value = data.takeProfit;
-//         document.getElementById('stopLoss').value = data.stopLoss;
-//         document.getElementById("loginOverlay").remove(); // hide overlay
-//         startLogStream();
-//         checkTokenStatus();
-//       })
-//       .catch(err => console.error(err));
-// }
-
-
 // Prompt for username
 function submitUsername() {
     const name = document.getElementById('usernameInput').value.trim();
@@ -167,7 +136,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const propUsername = document.getElementById("propUsername").value.trim();
 
   if (!propUsername) {
-    alert("Please enter your prop-firm username.");
+    alert("Please enter your prop firm username.");
     return;
   }
 
@@ -197,50 +166,51 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   });
 
-
-  // --- SYMBOL SEARCH ---
-  searchSymbolBtn.addEventListener("click", async () => {
-    const symbol = symbolInput.value.trim();
-    if (!symbol) {
-      alert("Please enter a symbol first.");
-      return;
-    }
-
-    const resp = await fetch("/set_symbol", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: currentUser, symbol })
-    });
-
-    const data = await resp.json();
-    if (resp.ok) {
-      alert(`Symbol set successfully: ${data.contractId}`);
-    } else {
-      alert(`Error: ${data.error || "Symbol not found"}`);
-    }
-  });
-
   // --- ACCOUNT SEARCH ---
-  searchAccountBtn.addEventListener("click", async () => {
-    const account = accountInput.value.trim();
-    if (!account) {
-      alert("Please enter an account name first.");
-      return;
-    }
+setAccountBtn.addEventListener("click", async () => {
+  const account = accountInput.value.trim();
+  console.log("setAccountBtn");
+  if (!account) {
+    alert("Please enter an account name first.");
+    return;
+  }
 
-    const resp = await fetch("/set_account", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: currentUser, account })
-    });
-
-    const data = await resp.json();
-    if (resp.ok) {
-      alert(`Account set successfully: ${data.accountId}`);
-    } else {
-      alert(`Error: ${data.error || "Account not found"}`);
-    }
+  const resp = await fetch("/set_account", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: currentUser, account })
   });
+
+  const data = await resp.json();
+  if (resp.ok && data.status === "ok") {
+    alert(`✅ Account set successfully: ${data.account} (${data.accountId})`);
+  } else {
+    alert(`❌ ${data.error || "Account not found."}`);
+  }
+});
+
+setSymbolBtn.addEventListener("click", async () => {
+  console.log("setSymbolBtn");
+  const symbol = symbolInput.value.trim();
+  if (!symbol) {
+    alert("Please enter a contract name first.");
+    return;
+  }
+
+  const resp = await fetch("/set_contract", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: currentUser, symbol })
+  });
+
+  const data = await resp.json();
+  if (resp.ok && data.status === "ok") {
+    alert(`✅ Contract set successfully: ${data.contractName} (${data.contractId})\n${data.description || ""}`);
+  } else {
+    alert(`❌ ${data.error || "Contract not found."}`);
+  }
+});
+
 });
 
 
