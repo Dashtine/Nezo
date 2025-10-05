@@ -1,8 +1,9 @@
 import json
 import os
+import pytz
 from flask import Flask, request, jsonify, render_template, Response, send_from_directory
-from datetime import datetime
-from topstepx_api import ACC_ID, CONTRACT_ID, place_order, get_accounts, get_contracts, has_open_position
+from datetime import datetime, timezone, timedelta
+from topstepx_api import ACC_ID, CONTRACT_ID, place_order, get_accounts, get_contracts, has_open_position, generate_token
 
 app = Flask(__name__)
 
@@ -79,6 +80,94 @@ def test_long():
 
     return ''
   
+@app.route('/set_api_key', methods=['POST'])
+def set_api_key():
+    data = request.get_json()
+    # username = 'j<kpqismuggle'
+
+    username = data.get("username")          # dashboard username
+    prop_username = data.get("propUsername") # prop-firm username
+    api_key = data.get("apiKey")
+    print(username)
+    print(api_key)
+    print(prop_username)
+    if not username or not api_key or not prop_username:
+        return jsonify({"error": "Username, prop-firm username, and API key required"}), 400
+
+    reload_config()
+    if username not in config["users"]:
+        return jsonify({"error": "Unauthorized user"}), 403
+
+    try:
+        token_data = generate_token(api_key, prop_username)
+        expiry_time = token_data["expiry"]
+        token = token_data["token"]
+
+        config["users"][username]["propUsername"] = prop_username
+        config["users"][username]["apiKey"] = api_key
+        config["users"][username]["token"] = token
+        config["users"][username]["token_expiry"] = expiry_time.isoformat()
+        save_config(config)
+
+        # convert UTC to PST for display
+        pst = pytz.timezone("America/Los_Angeles")
+        expiry_pst = expiry_time.replace(tzinfo=timezone.utc).astimezone(pst)
+        expiry_str = expiry_pst.strftime("%Y-%m-%d %I:%M %p %Z")
+
+        log_message(f"Token generated for {username} ({prop_username}), expires {expiry_str}")
+
+        return jsonify({
+            "status": "ok",
+            "expiry": expiry_str
+        })
+
+    except Exception as e:
+        log_message(f"Error generating token for {username}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/check_token', methods=['GET'])
+def check_token():
+    # username = 'j<kpqismuggle'
+    username = request.args.get("username")
+    reload_config()
+
+    if username not in config["users"]:
+        return jsonify({"error": "Unauthorized user"}), 403
+
+    user = config["users"][username]
+    token = user.get("token")
+    expiry_str = user.get("token_expiry")
+
+    if not token or not expiry_str:
+        return jsonify({"valid": False, "message": "No token found"}), 200
+
+    try:
+        expiry_time = datetime.fromisoformat(expiry_str)
+    except ValueError:
+        return jsonify({"valid": False, "message": "Invalid expiry format"}), 200
+    
+    if expiry_time.tzinfo is None:
+        expiry_time = expiry_time.replace(tzinfo=timezone.utc)
+
+    now = datetime.now(timezone.utc)
+
+    if now > expiry_time:
+        return jsonify({
+            "valid": False,
+            "message": "Token expired. Please validate key again."
+        }), 200
+
+    # Convert to PST for nice display
+    pst = pytz.timezone("America/Los_Angeles")
+    expiry_pst = expiry_time.astimezone(pst)
+    expiry_display = expiry_pst.strftime("%Y-%m-%d %I:%M %p %Z")
+
+    return jsonify({
+        "valid": True,
+        "expiry": expiry_display,
+        "message": f"Session is good for 24 hours. You must validate again before {expiry_display}."
+    }), 200
+
 # Places a market short order
 @app.route('/test_short', methods=['POST'])
 def test_short():

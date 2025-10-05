@@ -1,4 +1,5 @@
 import requests
+from datetime import datetime, timedelta
 
 BASE_URL = "https://api.topstepx.com"   # or demo gateway if you're testing
 API_TOKEN = ""
@@ -65,3 +66,39 @@ def get_contracts():
     resp = requests.post(url, headers=_headers(), json={"live": True})
     resp.raise_for_status()
     return resp.json()
+
+def generate_token(api_key, username=None):
+    """Use the user's API key to request a new access token from TopstepX."""
+    url = f"{BASE_URL}/api/Auth/loginKey"
+    headers = {
+        "accept": "text/plain",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "userName": username,
+        "apiKey": api_key}
+    resp = requests.post(url, headers=headers, json=payload)
+    resp.raise_for_status()
+    token_data = resp.json()
+
+    # Extract fields based on actual response structure
+    token = token_data.get("token")
+    success = token_data.get("success", False)
+    error_message = token_data.get("errorMessage")
+
+    if not success or not token:
+        raise Exception(f"TopstepX authentication failed: {error_message or 'Unknown error'}")
+
+    # TopstepX doesn’t provide expiry, so we assume 1 hour validity
+    expiry_time = datetime.utcnow() + timedelta(hours=24)
+
+    if username:
+        print(f"[TopstepX] Token generated for {username}, assumed expiry {expiry_time.isoformat()}")
+
+    return {
+        "token": token,
+        "expiry": expiry_time
+    }
+
+

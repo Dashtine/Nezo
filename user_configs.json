@@ -3,7 +3,11 @@
     "j<kpqismuggle": {
       "contracts": 2,
       "takeProfit": 20,
-      "stopLoss": 10
+      "stopLoss": 10,
+      "propUsername": "dashtine",
+      "apiKey": "KyqoSeszZP5oyvTVdkp/9vmtox4hChNaBK3rdE+i1Wg=",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1laWRlbnRpZmllciI6IjE3NDQ2MSIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL3NpZCI6ImViZTYyZjViLWE3NWYtNDIwNS1hMmRlLTczZTA5NDEwMjhkMSIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL25hbWUiOiJkYXNodGluZSIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6InVzZXIiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL2F1dGhlbnRpY2F0aW9ubWV0aG9kIjoiYXBpLWtleSIsIm1zZCI6WyJDTUVHUk9VUF9UT0IiLCJDTUVfVE9CIl0sIm1mYSI6InZlcmlmaWVkIiwiZXhwIjoxNzU5NzE3MTg1fQ.ytb46DIHj9v6koNq9sBC2rYJpINKnNlezJkvdvVTuRM",
+      "token_expiry": "2025-10-06T02:19:42.977202"
     },
     "pinkstaroo": {
       "contracts": 1,
