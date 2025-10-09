@@ -1,137 +1,147 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title></title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nezo6</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div id="loginOverlay">
-        <div style="text-align:center; margin-top:20%;">
-            <h2>Enter Username</h2>
-            <input type="text" id="usernameInput" placeholder="Username" value="j<kpqismuggle">
-            <button onclick="submitUsername()" style="">Login</button>
+  <!-- ========================== -->
+  <!-- Login Overlay -->
+  <!-- ========================== -->
+  <div id="loginOverlay">
+    <div style="text-align:center; margin-top:20%;">
+      <h2>Enter Username</h2>
+      <input type="text" id="usernameInput" placeholder="Username">
+      <button onclick="submitUsername()">Login</button>
+    </div>
+  </div>
+  <!-- ========================== -->
+  <!-- Account Settings Section -->
+  <!-- ========================== -->
+  <div class="form-container" id="accountSettings">
+    <h2 style="margin-bottom:10px;"></h2>
+
+    <!-- Propfirm Username -->
+    <div class="form-group">
+      <label for="propUsername">Prop Firm Username:</label>
+      <div class="input-wrapper">
+        <input 
+          type="text" 
+          id="propUsername" 
+          name="propUsername" 
+          placeholder="Enter your prop firm username"
+        >
+      </div>
+    </div>
+
+    <!-- API Key -->
+    <div class="form-group">
+      <label for="apiKey">API Key:</label>
+      <div class="input-wrapper">
+        <input 
+          type="password" 
+          id="apiKey" 
+          name="apiKey" 
+          placeholder="Enter your API key"
+        >
+        <button 
+          type="button" 
+          id="validateAndSave" 
+          class="save"
+          style="margin-left:10px; padding:8px 15px;"
+        >
+          Set
+        </button>
+      </div>
+    </div>
+
+    <!-- Account Selection -->
+    <div class="form-group">
+      <label for="accountInput">Account:</label>
+      <div class="input-wrapper">
+        <input 
+          type="text" 
+          id="accountInput" 
+          name="accountInput" 
+          placeholder="e.g. 50KTC-V2-171261-99323003"
+        >
+        <button 
+          type="button" 
+          id="setAccountBtn" 
+          class="save"
+          style="margin-left:10px; padding:8px 15px;"
+        >
+          Set
+        </button>
+      </div>
+    </div>
+
+    <!-- Contract / Symbol -->
+    <div class="form-group">
+      <label for="symbolInput">Symbol:</label>
+      <div class="input-wrapper">
+        <input 
+          type="text" 
+          id="symbolInput" 
+          name="symbolInput" 
+          placeholder="e.g. MNQZ25"
+        >
+        <button 
+          type="button" 
+          id="setSymbolBtn" 
+          class="save"
+          style="margin-left:10px; padding:8px 15px;"
+        >
+          Set
+        </button>
+      </div>
+    </div>
+
+    <p id="tokenStatus" style="text-align:center; margin-top:10px; color:#333; font-size:14px;"></p>
+  </div>
+
+  <!-- ========================== -->
+  <!-- Bot Controls -->
+  <!-- ========================== -->
+  <button id="toggleButton" class="start" onclick="toggleBot()">Start</button>
+  <div id="logs"></div>
+
+  <!-- ========================== -->
+  <!-- Bot Settings -->
+  <!-- ========================== -->
+  <div class="form-container">
+    <form id="settingsForm">
+      <div class="form-group">
+        <label for="contracts">Contracts:</label>
+        <div class="input-wrapper">
+          <input type="number" id="contracts" name="contracts" placeholder="0">
         </div>
-    </div>
-    <h1></h1>
-<!-- ========================== -->
-<!-- Account Settings Section -->
-<!-- ========================== -->
-<div class="form-container" id="accountSettings">
-  <h2 style="margin-bottom:10px;">Account Settings</h2>
 
-  <!-- Propfirm Username -->
-  <div class="form-group">
-    <label for="propUsername">Prop Firm Username:</label>
-    <div class="input-wrapper">
-      <input 
-        type="text" 
-        id="propUsername" 
-        name="propUsername" 
-        placeholder="Enter your prop firm username"
-        value="dashtine"
-      >
-    </div>
-  </div>
+        <label for="takeProfit">Take Profit:</label>
+        <div class="input-wrapper">
+          <input type="number" id="takeProfit" name="takeProfit" placeholder="0">
+        </div>
 
-  <!-- API Key -->
-  <div class="form-group">
-    <label for="apiKey">Key:</label>
-    <div class="input-wrapper">
-      <input 
-        type="password" 
-        id="apiKey" 
-        name="apiKey" 
-        placeholder="Enter your API key"
-      >
-      <button 
-        type="button" 
-        id="validateAndSave" 
-        class="save"
-        style="margin-left:10px; padding:8px 15px;"
-      >
-        Set
-      </button>
-    </div>
-  </div>
-
-  <!-- Account Search -->
-  <div class="form-group">
-    <label for="accountInput">Account:</label>
-    <div class="input-wrapper">
-      <input 
-        type="text" 
-        id="accountInput" 
-        name="accountInput" 
-        placeholder="e.g. 50KTC-V2-171261-99323003"
-      >
-      <button 
-        type="button" 
-        id="setAccountBtn" 
-        class="save"
-        style="margin-left:10px; padding:8px 15px;"
-      >
-        Set
-      </button>
-    </div>
-  </div>
-
-  <!-- Symbol / Contract Search -->
-  <div class="form-group">
-    <label for="symbolInput">Symbol:</label>
-    <div class="input-wrapper">
-      <input 
-        type="text" 
-        id="symbolInput" 
-        name="symbolInput" 
-        placeholder="e.g. MNQZ2025"
-      >
-      <button 
-        type="button" 
-        id="setSymbolBtn" 
-        class="save"
-        style="margin-left:10px; padding:8px 15px;"
-      >
-        Set
-      </button>
-    </div>
-          <p id="tokenStatus" style="text-align:center; margin-top:10px; color:#333; font-size:14px;"></p>
-
-  </div>
-</div>
-
-    <button id="toggleButton" class="start" onclick="toggleBot()">Start</button>
-    <div id="logs"></div>
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
-    <div class="form-container">
-        <form id="settingsForm">
-            <div class="form-group">
-                <label for="tradeAmount">Contracts</label>
-                <div class="input-wrapper">
-                    <input type="number" id="contracts" name="tradeAmount" placeholder="0">
-                    <span class="input-symbol"></span>
-                </div>
-
-                <label for="takeProfit">Take Profit:</label>
-                <div class="input-wrapper">
-                    <input type="number" id="takeProfit" name="takeProfit" placeholder="0">
-                    <span class="input-symbol"></span>
-                </div>
-
-                <label for="stopLoss">Stop Loss:</label>
-                <div class="input-wrapper">
-                    <input type="number" id="stopLoss" name="stopLoss" placeholder="0">
-                    <span class="input-symbol"></span>
-                </div>
+        <label for="stopLoss">Stop Loss:</label>
+        <div class="input-wrapper">
+          <input type="number" id="stopLoss" name="stopLoss" placeholder="0">
+        </div>
                 
-                <button type="button" class="save" onclick="saveSettings()">Save</button>
-            </div>
-        </form>
-    </div>
-    <div>   
-       <button id="testlongbtn" style="background-color:rgb(1, 113, 1)" class="start" onclick="TestLong()">Test Long</button>
-       <button id="testshortbtn" style="background-color:rgb(173, 14, 14)" class="start" onclick="TestShort()">Test Short</button>
-    </div> 
+        <button type="button" class="save" onclick="saveSettings()">Save</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ========================== -->
+  <!-- Test Buttons -->
+  <!-- ========================== -->
+  <div>   
+    <button id="testlongbtn" style="background-color:rgb(1, 113, 1)" class="start" onclick="TestLong()">Test Long</button>
+    <button id="testshortbtn" style="background-color:rgb(173, 14, 14)" class="start" onclick="TestShort()">Test Short</button>
+  </div> 
+
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>

@@ -1,106 +1,108 @@
 import requests
 from datetime import datetime, timedelta
 
-BASE_URL = "https://api.topstepx.com"   # or demo gateway if you're testing
-API_TOKEN = ""
-CONTRACT_ID = "CON.F.US.MNQ.Z25"
-ACC_ID = "9216410"
+BASE_URL = "https://api.topstepx.com"  # main TopstepX API endpoint
 
 
-def _headers():
+# Builds the authorization headers dynamically
+def _headers(token=None):
     return {
-        "Authorization": f"Bearer {API_TOKEN}",
+        "Authorization": f"Bearer {token or ''}",
         "Content-Type": "application/json",
         "accept": "application/json"
     }
 
-# Places a market based on alert and parameters
-def place_order(account_id, contract_id, side, size, tp_ticks, sl_ticks):
+
+# ======================================================
+# Order Placement
+# ======================================================
+def place_order(account_id, contract_id, side, size, tp_ticks, sl_ticks, token):
+    """
+    Places a market order with TP and SL brackets.
+    side: 0 = Buy, 1 = Sell
+    """
     url = f"{BASE_URL}/api/Order/place"
 
     payload = {
         "accountId": account_id,
         "contractId": contract_id,
-        "type": 2,   # 2 = Market order
+        "type": 2,  # 2 = Market
         "side": side,
         "size": size,
-        "takeProfitBracket": {
-          "ticks": tp_ticks,
-          "type": 1
-        },
-        "stopLossBracket": {
-        "ticks": sl_ticks, 
-        "type": 4
-        }
+        "takeProfitBracket": {"ticks": tp_ticks, "type": 1},
+        "stopLossBracket": {"ticks": sl_ticks, "type": 4}
     }
 
-    resp = requests.post(url, headers=_headers(), json=payload)
+    resp = requests.post(url, headers=_headers(token), json=payload)
     resp.raise_for_status()
     return resp.json()
 
-# checks if there are any open positions
-# returns true if there are
-def has_open_position(account_id):
-    url = f"{BASE_URL}/api/Position/searchOpen"
 
+
+# ======================================================
+# Position Checking
+# ======================================================
+def has_open_position(account_id, token=None):
+    """
+    Checks if there are any open positions for the given account.
+    Returns True if open positions exist.
+    """
+    url = f"{BASE_URL}/api/Position/searchOpen"
     payload = {"accountId": account_id}
 
-    resp = requests.post(url, headers=_headers(), json=payload)
+    resp = requests.post(url, headers=_headers(token), json=payload)
     resp.raise_for_status()
     data = resp.json()
-
-    positions = data.get("positions", [])
-    return len(positions) > 0
+    return len(data.get("positions", [])) > 0
 
 
-# Verify and grab the account id
+# ======================================================
+# Account and Contract Management
+# ======================================================
 def get_account(token):
-    """Return list of accounts for the authenticated user."""
+    """
+    Returns list of active accounts for the authenticated user.
+    """
     url = f"{BASE_URL}/api/Account/search"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "accept": "application/json",
-        "Content-Type": "application/json"
-    }
-
-    payload = {"onlyActiveAccounts": True}
-
-    resp = requests.post(url, headers=headers, json=payload)
+    resp = requests.post(
+        url,
+        headers=_headers(token),
+        json={"onlyActiveAccounts": True}
+    )
     resp.raise_for_status()
     return resp.json()
 
-# Verify and get contract id
+
 def get_contract(token):
-    """Return all available contracts for the user."""
+    """
+    Returns list of available contracts for the authenticated user.
+    """
     url = f"{BASE_URL}/api/Contract/available"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "accept": "application/json",
-        "Content-Type": "application/json"
-    }
-
-    payload = {"live": False}
-
-    resp = requests.post(url, headers=headers, json=payload)
+    resp = requests.post(
+        url,
+        headers=_headers(token),
+        json={"live": False}
+    )
     resp.raise_for_status()
     return resp.json()
 
-def generate_token(api_key, username=None):
-    """Use the user's API key to request a new access token from TopstepX."""
-    url = f"{BASE_URL}/api/Auth/loginKey"
-    headers = {
-        "accept": "text/plain",
-        "Content-Type": "application/json"
-    }
 
-    payload = {
-        "userName": username,
-        "apiKey": api_key}
+# ======================================================
+# Authentication
+# ======================================================
+def generate_token(api_key, username=None):
+    """
+    Exchanges an API key for a temporary session token.
+    Returns dict with token and expiry datetime.
+    """
+    url = f"{BASE_URL}/api/Auth/loginKey"
+    payload = {"userName": username, "apiKey": api_key}
+    headers = {"accept": "text/plain", "Content-Type": "application/json"}
+
     resp = requests.post(url, headers=headers, json=payload)
     resp.raise_for_status()
     token_data = resp.json()
 
-    # Extract fields based on actual response structure
     token = token_data.get("token")
     success = token_data.get("success", False)
     error_message = token_data.get("errorMessage")
@@ -108,15 +110,9 @@ def generate_token(api_key, username=None):
     if not success or not token:
         raise Exception(f"TopstepX authentication failed: {error_message or 'Unknown error'}")
 
-    # TopstepX doesn’t provide expiry, so we assume 1 hour validity
     expiry_time = datetime.utcnow() + timedelta(hours=24)
+    print(f"[TopstepX] Token generated for {username or 'N/A'}, expires {expiry_time.isoformat()}")
 
-    if username:
-        print(f"[TopstepX] Token generated for {username}, assumed expiry {expiry_time.isoformat()}")
-
-    return {
-        "token": token,
-        "expiry": expiry_time
-    }
+    return {"token": token, "expiry": expiry_time}
 
 

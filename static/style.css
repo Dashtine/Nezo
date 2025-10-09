@@ -164,3 +164,9 @@ button:hover {
 .toggle-button:hover {
   background-color: #bbb;
 }
+
+#tokenStatus {
+  text-align: center;
+  width: 100%;
+  display: block;
+}

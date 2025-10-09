@@ -1,285 +1,180 @@
-let isRunning = false;
 let currentUser = null;
 
 // Prompt for username
 function submitUsername() {
-    const name = document.getElementById('usernameInput').value.trim();
-    if (!name) {
-        denyAccess("Unauthorized user. Access denied.");
-        return;
-    }
-    console.log(name);
-    fetch(`/get_settings?username=${name}`)
-      .then(res => {
-        if (res.status === 403) {
-            denyAccess("Unauthorized user. Access denied.");
-            throw new Error("Unauthorized");
-        }
-        return res.json();
-      })
-      .then(data => {
+  const name = document.getElementById('usernameInput').value.trim();
+  if (!name) {
+    denyAccess("Unauthorized user. Access denied.");
+    return;
+  }
+
+  fetch('/validate_user', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: name })
+  })
+    .then(res => {
+      if (!res.ok) throw new Error("Unauthorized");
+      return res.json();
+    })
+    .then(data => {
+      if (data.valid) {
         currentUser = name;
-        
-async function checkTokenStatus() {
-  const statusEl = document.getElementById("tokenStatus");
-  const resp = await fetch(`/check_token?username=${currentUser}`);
-  const data = await resp.json();
-
-  if (data.valid) {
-    statusEl.innerHTML = `✅ ${data.message}`;
-  } else {
-    statusEl.innerHTML = `<span style="color:red;">❌ ${data.message || "Please validate your API key."}</span>`;
-  }
-}
-
-        document.getElementById('contracts').value = data.contracts;
-        document.getElementById('takeProfit').value = data.takeProfit;
-        document.getElementById('stopLoss').value = data.stopLoss;
-        document.getElementById("loginOverlay").remove(); // hide overlay
+        document.getElementById("loginOverlay").remove();
         startLogStream();
-        
-      })
-      .catch(err => console.error(err));
-}
-
-
-// Allow pressing "Enter" in the input field
-document.addEventListener("keydown", function(event) {
-    if (event.key === "Enter" && document.getElementById("loginOverlay")) {
-        event.preventDefault(); // stop form submit/reload
-        submitUsername();
-    }
-});
-
-document.addEventListener("DOMContentLoaded", function() {
-  const keyInput = document.getElementById("apiKey");
-  const toggleBtn = document.getElementById("toggleKeyVisibility");
-
-  if (toggleBtn && keyInput) {
-    toggleBtn.addEventListener("click", () => {
-      if (keyInput.type === "password") {
-        keyInput.type = "text";
-        toggleBtn.textContent = "Hide";
       } else {
-        keyInput.type = "password";
-        toggleBtn.textContent = "Show";
+        denyAccess("Unauthorized user. Access denied.");
       }
-    });
+    })
+    .catch(() => denyAccess("Unauthorized user. Access denied."));
+}
+
+// Press Enter to login
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter" && document.getElementById("loginOverlay")) {
+    e.preventDefault();
+    submitUsername();
   }
 });
 
-function denyAccess(message) {
-    document.body.innerHTML = `
-      <h2 style="color:red;text-align:center;margin-top:20%">${message}</h2>
-    `;
+function denyAccess(msg) {
+  document.body.innerHTML = `
+    <h2 style="color:red;text-align:center;margin-top:20%">${msg}</h2>
+  `;
 }
 
-async function checkTokenStatus() {
-  const statusEl = document.getElementById("tokenStatus");
-  const resp = await fetch(`/check_token?username=${currentUser}`);
-  const data = await resp.json();
-
-  if (data.valid) {
-    statusEl.innerHTML = `✅ ${data.message}`;
-  } else {
-    statusEl.innerHTML = `<span style="color:red;">❌ ${data.message || "Please validate your API key."}</span>`;
-  }
-}
-
-// async function checkTokenStatus() {
-//   const statusEl = document.getElementById("tokenStatus");
-//   if (!statusEl) return;
-
-//   try {
-//     const resp = await fetch(`/check_token?username=${currentUser}`);
-//     const data = await resp.json();
-
-//     if (data.valid) {
-//       statusEl.innerHTML = `✅ ${data.message}`;
-//     } else {
-//       statusEl.innerHTML = `<span style="color:red;">❌ ${data.message || "Please validate your API key."}</span>`;
-//     }
-//   } catch (err) {
-//     console.error("Error checking token:", err);
-//   }
-// }
-
-// Call on page load
-window.onload = function() {
-
-
-//   startLogStream();
-//     // fetch(`/get_settings?username=j<kpqismuggle`)
-//   fetch(`/get_settings?username=${currentUser}`)
-//     .then(res => res.json())
-//     .then(data => {
-//       document.getElementById('contracts').value = data.contracts;
-//       document.getElementById('takeProfit').value = data.takeProfit;
-//       document.getElementById('stopLoss').value = data.stopLoss;
-//     })
-//     .then(() => checkTokenStatus()); // <— here’s the new part
-};
-
-// Handle Account Settings interactions
+// ===== Account / API Section =====
 document.addEventListener("DOMContentLoaded", () => {
   const apiKeyInput = document.getElementById("apiKey");
-  const symbolInput = document.getElementById("symbolInput");
-  const accountInput = document.getElementById("accountInput");
+  const propUserInput = document.getElementById("propUsername");
 
-  const validateBtn = document.getElementById("validateAndSave");
-  const searchSymbolBtn = document.getElementById("searchSymbolBtn");
-  const searchAccountBtn = document.getElementById("searchAccountBtn");
+  // Validate API Key
+  document.getElementById("validateAndSave").addEventListener("click", async () => {
+    const apiKey = apiKeyInput.value.trim();
+    const propUsername = propUserInput.value.trim();
 
-  // --- API KEY VALIDATION ---
-  validateBtn.addEventListener("click", async () => {
-  const apiKey = apiKeyInput.value.trim();
-  const propUsername = document.getElementById("propUsername").value.trim();
-
-  if (!propUsername) {
-    alert("Please enter your prop firm username.");
-    return;
-  }
-
-  if (!apiKey) {
-    alert("Please enter your API key.");
-    return;
-  }
-
-  const resp = await fetch("/set_api_key", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-    //   username: 'j<kpqismuggle',      // your local dashboard login
-      username: currentUser,
-      propUsername: propUsername, // Topstep / prop-firm username
-      apiKey: apiKey
-    })
-  });
-
-  const data = await resp.json();
-  const statusEl = document.getElementById("tokenStatus");
-  if (resp.ok) {
-    statusEl.innerHTML = `✅ Session is good for 24 hours.<br>
-      You must validate again before <b>${data.expiry}</b>.`;
-  } else {
-    statusEl.innerHTML = `<span style="color:red;">❌ Error: ${data.error || "Failed to validate API key"}</span>`;
-  }
-  });
-
-  // --- ACCOUNT SEARCH ---
-setAccountBtn.addEventListener("click", async () => {
-  const account = accountInput.value.trim();
-  console.log("setAccountBtn");
-  if (!account) {
-    alert("Please enter an account name first.");
-    return;
-  }
-
-  const resp = await fetch("/set_account", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: currentUser, account })
-  });
-
-  const data = await resp.json();
-  if (resp.ok && data.status === "ok") {
-    alert(`✅ Account set successfully: ${data.account} (${data.accountId})`);
-  } else {
-    alert(`❌ ${data.error || "Account not found."}`);
-  }
-});
-
-setSymbolBtn.addEventListener("click", async () => {
-  console.log("setSymbolBtn");
-  const symbol = symbolInput.value.trim();
-  if (!symbol) {
-    alert("Please enter a contract name first.");
-    return;
-  }
-
-  const resp = await fetch("/set_contract", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: currentUser, symbol })
-  });
-
-  const data = await resp.json();
-  if (resp.ok && data.status === "ok") {
-    alert(`✅ Contract set successfully: ${data.contractName} (${data.contractId})\n${data.description || ""}`);
-  } else {
-    alert(`❌ ${data.error || "Contract not found."}`);
-  }
-});
-
-});
-
-
-// Flips the start/stop button
-function toggleBot() {
-    const button = document.getElementById('toggleButton');
-    const isStarted = button.classList.contains('start');
-    
-    const contracts = document.getElementById('contracts');
-    const takeProfit = document.getElementById('takeProfit');
-    const stopLoss = document.getElementById('stopLoss');
-    const saveBtn = document.querySelector('.save');
-    
-    if (isStarted) {
-        button.classList.remove('start');
-        button.classList.add('stop');
-        button.textContent = 'Stop';
-        contracts.disabled = true;
-        takeProfit.disabled = true;
-        stopLoss.disabled = true;
-        saveBtn.disabled = true;
-
-        fetch('/start', { method: 'POST' });
-    } else {
-        button.classList.remove('stop');
-        button.classList.add('start');
-        button.textContent = 'Start';
-        contracts.disabled = false;
-        takeProfit.disabled = false;
-        stopLoss.disabled = false;
-        saveBtn.disabled = false;
-
-        fetch('/stop', { method: 'POST' });
+    if (!apiKey || !propUsername) {
+      alert("Please enter both prop username and API key.");
+      return;
     }
-}
 
-// Saves the settings the user has set
-function saveSettings() {
-    const settings = {
-        username: currentUser,
-        contracts: parseInt(document.getElementById('contracts').value),
-        takeProfit: parseInt(document.getElementById('takeProfit').value),
-        stopLoss: parseInt(document.getElementById('stopLoss').value)
-    };
-
-    fetch('/save_settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings)
+    const resp = await fetch("/set_api_key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiKey, propUsername })
     });
+
+    const data = await resp.json();
+    const statusEl = document.getElementById("tokenStatus");
+
+    if (resp.ok) {
+      statusEl.innerHTML = `✅ Session is good for 24 hours.`;
+    } else {
+      statusEl.innerHTML = `<span style="color:red;">❌ ${data.error || "Failed to validate API key"}</span>`;
+    }
+  });
+
+  // Set account
+  document.getElementById("setAccountBtn").addEventListener("click", async () => {
+    const account = document.getElementById("accountInput").value.trim();
+    if (!account) {
+      alert("Please enter an account name first.");
+      return;
+    }
+
+    const resp = await fetch("/set_account", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ account })
+    });
+
+    const data = await resp.json();
+    if (resp.ok && data.status === "ok") {
+      alert(`✅ Account set successfully: ${data.account} (${data.accountId})`);
+    } else {
+      alert(`❌ ${data.error || "Account not found."}`);
+    }
+  });
+
+  // Set contract
+  document.getElementById("setSymbolBtn").addEventListener("click", async () => {
+    const symbol = document.getElementById("symbolInput").value.trim();
+    if (!symbol) {
+      alert("Please enter a contract name first.");
+      return;
+    }
+
+    const resp = await fetch("/set_contract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol })
+    });
+
+    const data = await resp.json();
+    if (resp.ok && data.status === "ok") {
+      alert(`✅ Contract set successfully: ${data.contractName} (${data.contractId})\n${data.description || ""}`);
+    } else {
+      alert(`❌ ${data.error || "Contract not found."}`);
+    }
+  });
+});
+
+// ===== Bot Controls =====
+function toggleBot() {
+  const button = document.getElementById('toggleButton');
+  const isStarted = button.classList.contains('start');
+
+  const contracts = document.getElementById('contracts');
+  const takeProfit = document.getElementById('takeProfit');
+  const stopLoss = document.getElementById('stopLoss');
+  const saveBtn = document.querySelector('.save');
+
+  if (isStarted) {
+    button.classList.remove('start');
+    button.classList.add('stop');
+    button.textContent = 'Stop';
+    contracts.disabled = true;
+    takeProfit.disabled = true;
+    stopLoss.disabled = true;
+    saveBtn.disabled = true;
+    fetch('/start', { method: 'POST' });
+  } else {
+    button.classList.remove('stop');
+    button.classList.add('start');
+    button.textContent = 'Start';
+    contracts.disabled = false;
+    takeProfit.disabled = false;
+    stopLoss.disabled = false;
+    saveBtn.disabled = false;
+    fetch('/stop', { method: 'POST' });
+  }
 }
 
-// Places a test market long order
-function TestLong() {
-    fetch('/test_long', { method: 'POST' });
+// ===== Settings =====
+function saveSettings() {
+  const settings = {
+    contracts: parseInt(document.getElementById('contracts').value),
+    takeProfit: parseInt(document.getElementById('takeProfit').value),
+    stopLoss: parseInt(document.getElementById('stopLoss').value)
+  };
+
+  fetch('/save_settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings)
+  });
 }
 
-// Places a test market short order
-function TestShort() {
-    fetch('/test_short', { method: 'POST' });
-}
+// ===== Testing =====
+function TestLong() { fetch('/test_long', { method: 'POST' }); }
+function TestShort() { fetch('/test_short', { method: 'POST' }); }
 
-// Starts up the on screen messages
-function startLogStream(){
-    const eventSource = new EventSource('/logs');
-    eventSource.onmessage = function(event){
-        const logContainer = document.getElementById('logs');
-        logContainer.innerHTML += event.data + '<br>';
-        logContainer.scrollTop = logContainer.scrollHeight;
-    };
+// ===== Logs =====
+function startLogStream() {
+  const eventSource = new EventSource('/logs');
+  eventSource.onmessage = e => {
+    const logContainer = document.getElementById('logs');
+    logContainer.innerHTML += e.data + '<br>';
+    logContainer.scrollTop = logContainer.scrollHeight;
+  };
 }
-
