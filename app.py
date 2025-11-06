@@ -1,23 +1,36 @@
-import pytz
 import threading
 import logging
 import time
-from signalrcore.hub_connection_builder import HubConnectionBuilder
+import requests
+import string
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from flask import Flask, request, jsonify, render_template, Response
-from datetime import datetime, timezone
-from topstepx_api import place_order, get_account, get_contract, has_open_position, generate_token
+from signalrcore.hub_connection_builder import HubConnectionBuilder
 
-app = Flask(__name__)
+from topstepx_api import (
+    place_order,
+    get_account,
+    get_contract,
+    has_open_position,
+    generate_token,
+    cancel_order,
+    modify_order,
+    get_latest_position
+)
+from levels import retrieve_bars, detect_swings, detect_fvg, get_levels, get_3sec_bar
 
 # ======================================================
 # CONFIGURATION
 # ======================================================
 
-# All settings live only in memory
+app = Flask(__name__)
+
 settings = {
     "contracts": 0,
     "takeProfit": 0,
     "stopLoss": 0,
+    "tpslMethod": "",
     "propUsername": "",
     "apiKey": "",
     "token": "",
@@ -29,36 +42,64 @@ settings = {
     "contractDesc": ""
 }
 
-AUTHORIZED_USER = "jkpqismuggle"  # your only valid username
+# ======================================================
+# TRADE STATE MANAGEMENT
+# ======================================================
+trade_state = {
+    "active": False,             # True while a position is open
+    "direction": None,           # 'bullish' or 'bearish'
+    "entry_price": None,         # Filled entry price
+    "entry_size": 0,             # Size of the entry position
+    "account_id": None,          # Account reference
+    "tp_orders": [],             # [tp1_order_id, tp2_order_id]
+    "sl_order": None,            # stop-loss order id
+    "be_price": None,            # break-even price (future dynamic use)
+    "opened_at": None,           # ISO timestamp of trade open
+    "closed_at": None,           # ISO timestamp of trade close
+    "brackets_set": False        # True once TP/SL orders are placed
+}
+
+AUTHORIZED_USER = "jkpqismuggle"
 running = False
+trade_lock = False
 log_messages = []
 hub_connection = None
+running_breakeven = False
 
 # ======================================================
-# TOPSTEPX LIVE FEED
+# LOGGING HELPERS
 # ======================================================
-from signalrcore.hub_connection_builder import HubConnectionBuilder
-import threading
-import logging
 
+def log_message(message):
+    pst_now = datetime.now(ZoneInfo("America/Los_Angeles"))
+    ts = pst_now.strftime("%m-%d-%y %I:%M:%S %p PST")
+    entry = f"[{ts}] {message}"
+    print(entry)
+    log_messages.append(entry)
+    if len(log_messages) > 200:
+        log_messages.pop(0)
+
+def generate_logs():
+    while True:
+        if log_messages:
+            yield f"data: {log_messages.pop(0)}\n\n"
+
+# ======================================================
+# USERHUB CONNECTION
+# ======================================================
 
 def start_userhub():
-    global hub_connection
+    global hub_connection, trade_state
     token = settings.get("token")
     account_id = settings.get("accountId")
-    hub_url = f"https://rtc.topstepx.com/hubs/user?access_token={token}"
     if not token or not account_id:
         log_message("[UserHub] Cannot start: Missing token or account ID.")
         return
 
-    try:
-        # ======================================================
-        # 1. Build connection
-        # ======================================================
-        log_message("[UserHub] Attempting to connect to TopstepX Live Feed")
+    hub_url = f"https://rtc.topstepx.com/hubs/user?access_token={token}"
 
-        # Uncomment line below to show debug messages of the SignalR
-        # logging.basicConfig(level=logging.DEBUG)
+    try:
+        log_message("[UserHub] Connecting to TopstepX Live Feed")
 
         connection = (
             HubConnectionBuilder()
@@ -71,12 +112,9 @@ def start_userhub():
             })
             .build()
         )
-        # ======================================================
-        # 2. Event handlers
-        # ======================================================
+
         def on_open():
-            log_message("[UserHub] Connected successfully.")
-            # These method names are per the TopstepX docs
+            log_message("[UserHub] Connected.")
             connection.send("SubscribeAccounts", [])
             connection.send("SubscribeOrders", [account_id])
             connection.send("SubscribePositions", [account_id])
@@ -89,99 +127,173 @@ def start_userhub():
         def on_error(err):
             log_message(f"[UserHub] Error: {err}")
 
-        def on_generic(args):
-            log_message(f"[UserHub] Raw event: {args}")
-
-        def on_account_update(args):
-            print("[UserHub] Account update:", args)
-
-        def on_order_update(args):
-            print("[UserHub] Order update:", args)
-
         def on_position_update(args):
-            # Normalize payload
+            """Handles position updates from TopstepX UserHub (GatewayUserPosition)."""
+            print("ON POSITION UPDATE")
+            global trade_state
             payload = args[0] if isinstance(args, list) and args else args
             if not isinstance(payload, dict):
                 return
 
+            pos = payload.get("data", {}) or {}
             action = payload.get("action")
-            pos = payload.get("data", {})
-
-            if not isinstance(pos, dict):
-                return
-
+            account_id = pos.get("accountId")
+            contract_id = pos.get("contractId")
             size = pos.get("size", 0)
             avg_price = pos.get("averagePrice")
-            trade_type = pos.get("type")        # 1 = long, 2 = short
-            side = "Long" if trade_type == 1 else "Short" if trade_type == 2 else "?"
+            ttype = pos.get("type", -1)
+            position_id = pos.get("id")  # This is the position ID
 
-            # Update position flag
+            side = "Long" if ttype == 1 else "Short" if ttype == 2 else "Flat"
+
+            # Update hasPosition flag
             settings["hasPosition"] = size != 0
 
-            # Log simplified info
-            if action == 1:  # opened or updated
-                log_message(f"{side} placed at {avg_price}")
-            elif action == 2:  # closed
-                log_message(f"Position closed at {avg_price}")
+            # === POSITION CLOSED ===
+            if action == 2 or size == 0 or ttype == 0:
+                if trade_state.get("active"):
+                    log_message(f"[UserHub] 💎 Position CLOSED @ {avg_price} | Contract={contract_id}")
 
-            # Optional state confirmation
-            # log_message(f"[UserHub] hasPosition={settings['hasPosition']} (size={size})")
+                    if settings["tpslMethod"] == "ticks":
+                        return
+                    
+                    # Cancel any remaining TP/SL orders
+                    for oid in (trade_state.get("tp_orders") or []):
+                        print("IN FOR EACH OID")
+                        if oid:
+                            cancel_order(oid, settings["token"], settings["accountId"])
+                    if trade_state.get("sl_order"):
+                        print("IN OTHER OEN")
+                        cancel_order(trade_state["sl_order"], settings["token"], settings["accountId"])
+                    log_message("[UserHub] 🧹 All open orders canceled after close.")
 
+                    # Reset trade state
+                    trade_state.update({
+                        "active": False,
+                        "direction": None,
+                        "entry_price": None,
+                        "entry_size": 0,
+                        "tp_orders": [],
+                        "sl_order": None,
+                        "be_price": None,
+                        "opened_at": None,
+                        "closed_at": datetime.now(ZoneInfo("America/Los_Angeles")).isoformat(),
+                        "brackets_set": False
+                    })
+                else:
+                    log_message("[UserHub] Position close event received, but no active trade tracked.")
+                return
 
+            # === POSITION OPENED / ADJUSTED ===
+            if action == 1:
+                if settings["tpslMethod"] == "ticks":
+                        log_message(f"[UserHub] 🚀 {side} position OPENED @ {avg_price} (size={size})")
+                        return
+                
+                if not trade_state.get("active"):
+                    # New position opened
+                    trade_state.update({
+                        "active": True,
+                        "direction": side.lower(),
+                        "entry_price": avg_price,
+                        "entry_size": size,
+                        "account_id": account_id,
+                        "opened_at": datetime.now(ZoneInfo("America/Los_Angeles")).isoformat(),
+                        "brackets_set": False
+                    })
+                    log_message(f"[UserHub] 🚀 {side} position OPENED @ {avg_price} (size={size})")
 
+                else:
+                    # Existing position adjusted (scaled in or partial reduction)
+                    prev_size = trade_state.get("entry_size", 0)
+                    if size != prev_size or avg_price != trade_state.get("entry_price"):
+                        trade_state["entry_size"] = size
+                        trade_state["entry_price"] = avg_price
+                        log_message(f"[UserHub] 🔄 Position UPDATED | Side={side}, Size={size}, Avg={avg_price}")
 
-        def on_trade_update(args):
-            print("[UserHub] Trade update:", args)
-        # ======================================================
-        # 3. Register handlers
-        # ======================================================
+            # === LOG RAW EVENT ===
+            log_message(f"[UserHub] Event received → Action={action}, Type={ttype}, Side={side}, Size={size}, Price={avg_price}")
+        
+        def on_order_update(args):
+            """Handles order updates from TopstepX (GatewayUserOrder)."""
+            global trade_state
+
+            if settings["tpslMethod"] == "ticks":
+                return
+            
+            payload = args[0] if isinstance(args, list) and args else args
+            if not isinstance(payload, dict):
+                return
+
+            data = payload.get("data", {}) or {}
+            order_id = data.get("id")
+            account_id = data.get("accountId")
+            status = data.get("status")            # 2 = filled
+            fill_volume = data.get("fillVolume", 0)
+            order_type = data.get("type")          # 1 = Limit, 2 = Market, 4 = Stop
+            side = data.get("side")                # 0 = Buy, 1 = Sell
+
+            # Only react to fills
+            if status != 2 or fill_volume <= 0:
+                return
+
+            log_message(f"[UserHub] 📩 Order filled update received → ID={order_id}, Side={side}, Size={fill_volume}")
+
+            tp_orders = trade_state.get("tp_orders") or []
+            sl_order = trade_state.get("sl_order")
+
+            # --- CASE 1: TP1 filled ---
+            if len(tp_orders) >= 1 and order_id == tp_orders[0]:
+                log_message(f"[UserHub] 🎯 TP1 filled (order {order_id}). Adjusting SL size.")
+
+                try:
+                    total_size = trade_state.get("entry_size", 0)
+                    tp1_size = fill_volume                     # size of TP1 order
+                    remaining_size = max(total_size - tp1_size, 1)
+
+                    # Update trade_state size
+                    trade_state["entry_size"] = remaining_size
+
+                    # Modify SL order size
+                    modify_resp = modify_order(
+                        account_id=account_id,
+                        order_id=trade_state["sl_order"],
+                        new_size=remaining_size,
+                        token=settings["token"],
+                        stop_price=trade_state.get("sl_price")
+                    )
+
+                    if modify_resp.get("success"):
+                        log_message(f"[UserHub] 🛡️ SL size updated → {remaining_size} contracts after TP1 fill.")
+                    else:
+                        log_message(f"[UserHub] ⚠️ Failed to modify SL size: {modify_resp}")
+
+                except Exception as e:
+                    log_message(f"[UserHub] ❌ Error modifying SL after TP1 fill: {e}")
+
         connection.on_open(on_open)
         connection.on_close(on_close)
         connection.on_error(on_error)
-
-        # Debug catch-all (shows all traffic)
-        # connection.on("GatewayUserAccount", on_account_update)
-        # connection.on("GatewayUserOrder", on_order_update)
-        # connection.on("GatewayUserTrade", on_trade_update)
         connection.on("GatewayUserPosition", on_position_update)
-        # ======================================================
-        # 4. Start connection in background thread
-        # ======================================================
-        # threading.Thread(target=connection.start, daemon=True).start()
+        connection.on("GatewayUserOrder", on_order_update)
+        
         connection.start()
-
+        log_message("[UserHub] Connection thread started, waiting for events...")
         while True:
             time.sleep(5)
 
     except Exception as e:
         log_message(f"[UserHub] Failed to start: {e}")
-# ======================================================
-# HELPER FUNCTIONS
-# ======================================================
-def log_message(message):
-    timestamp = datetime.now().strftime('%m-%d-%y %H:%M:%S')
-    entry = f"[{timestamp}] {message}"
-    print(entry)
-    log_messages.append(entry)
-    if len(log_messages) > 100:
-        log_messages.pop(0)
-
-
-def generate_logs():
-    while True:
-        if log_messages:
-            yield f"data: {log_messages.pop(0)}\n\n"
-
 
 # ======================================================
 # ROUTES
 # ======================================================
-@app.route('/')
+
+@app.route("/")
 def index():
-    return render_template('index.html')
+    return render_template("index.html")
 
-
-@app.route('/validate_user', methods=['POST'])
+@app.route("/validate_user", methods=["POST"])
 def validate_user():
     data = request.get_json()
     username = data.get("username", "").strip()
@@ -189,202 +301,213 @@ def validate_user():
         return jsonify({"valid": False}), 403
     return jsonify({"valid": True})
 
-
-@app.route('/get_settings', methods=['GET'])
+@app.route("/get_settings", methods=["GET"])
 def get_settings():
     return jsonify(settings)
 
-
-@app.route('/save_settings', methods=['POST'])
+@app.route("/save_settings", methods=["POST"])
 def save_settings():
     data = request.get_json()
     settings["contracts"] = int(data.get("contracts", 0))
-    settings["takeProfit"] = int(data.get("takeProfit", 0))
-    settings["stopLoss"] = int(data.get("stopLoss", 0))
-    log_message("Settings updated in memory.")
+    settings["tpslMethod"] = str(data.get("tpslMethod", ""))
+
+    if settings["tpslMethod"] == "ticks":
+        settings["takeProfit"] = int(data.get("takeProfit", 0))
+        settings["stopLoss"] = int(data.get("stopLoss", 0))
+    else:
+        settings["takeProfit"] = 0
+        settings["stopLoss"] = 0
+
+
+    log_message("Settings updated.")
     return jsonify({"status": "ok", "settings": settings})
 
-
-@app.route('/set_api_key', methods=['POST'])
+@app.route("/set_api_key", methods=["POST"])
 def set_api_key():
     data = request.get_json()
     api_key = data.get("apiKey")
     prop_username = data.get("propUsername")
-
     if not api_key or not prop_username:
         return jsonify({"error": "API key and prop username required"}), 400
-
     try:
         token_data = generate_token(api_key, prop_username)
         expiry_time = token_data["expiry"]
         token = token_data["token"]
-
         settings.update({
             "propUsername": prop_username,
             "apiKey": api_key,
             "token": token,
             "token_expiry": expiry_time.isoformat()
         })
-
-        # pst = pytz.timezone("America/Los_Angeles")
-        # expiry_pst = expiry_time.replace(tzinfo=timezone.utc).astimezone(pst)
-        # expiry_str = expiry_pst.strftime("%Y-%m-%d %I:%M %p %Z")
-
-        log_message(f"API key authenticated for {prop_username}! Next, set account and symbol!")
-
-        return jsonify("status" "ok", "expiry")
-
+        log_message(f"API key authenticated for {prop_username}.")
+        return jsonify({"status": "ok", "expiry": expiry_time.isoformat()})
     except Exception as e:
         log_message(f"Error generating token: {e}")
         return jsonify({"error": str(e)}), 500
 
-
-@app.route('/set_account', methods=['POST'])
+@app.route("/set_account", methods=["POST"])
 def set_account():
     data = request.get_json()
     account_name = data.get("account")
-
     token = settings.get("token")
     if not token:
-        return jsonify({"error": "No valid token. Please validate your API key first."}), 400
-
+        return jsonify({"error": "No valid token. Please authenticate first."}), 400
     try:
         accounts_data = get_account(token)
-        accounts = accounts_data.get("accounts", [])
-        found = next((a for a in accounts if a.get("name", "").lower() == account_name.lower()), None)
-
-        if found:
-            settings["account"] = found.get("name")
-            settings["accountId"] = found.get("id")
-            log_message(f"Account set: {found.get('name')} ({found.get('id')})")
-
-            return jsonify({
-                "status": "ok",
-                "account": found.get("name"),
-                "accountId": found.get("id")
-            })
-
-        else:
+        found = next(
+            (a for a in accounts_data.get("accounts", [])
+             if a.get("name", "").lower() == account_name.lower()), None)
+        if not found:
             return jsonify({"status": "error", "error": "Account not found"}), 404
-
+        settings["account"] = found["name"]
+        settings["accountId"] = found["id"]
+        log_message(f"Account set: {found['name']} ({found['id']})")
+        return jsonify({"status": "ok", "account": found})
     except Exception as e:
         log_message(f"Error fetching account: {e}")
         return jsonify({"error": str(e)}), 500
 
-
-
-@app.route('/set_contract', methods=['POST'])
+@app.route("/set_contract", methods=["POST"])
 def set_contract():
     data = request.get_json()
     symbol = data.get("symbol", "").strip().upper()
     token = settings.get("token")
-
     if not token:
-        return jsonify({"error": "No valid token. Please validate your API key first."}), 400
-
+        return jsonify({"error": "No valid token."}), 400
     try:
         contract_data = get_contract(token)
         contracts = contract_data.get("contracts", [])
-
-        # Normalize user input and build alternate possibilities
-        # Example: user enters MNQZ25 -> alt is MNQZ5
-        #          or user enters MNQZ5  -> alt is MNQZ25
         alt_symbol = symbol
         if len(symbol) >= 3 and symbol[-2:].isdigit():
-            # Ends with two digits (e.g. MNQZ25)
             alt_symbol = symbol[:-2] + symbol[-1]
         elif len(symbol) >= 2 and symbol[-1].isdigit():
-            # Ends with one digit (e.g. MNQZ5)
             alt_symbol = symbol[:-1] + "2" + symbol[-1]
-        # Try matching either version
         found = next(
-            (c for c in contracts if c.get("name", "").upper() in [symbol, alt_symbol]),
+            (c for c in contracts
+             if c.get("name", "").upper() in [symbol, alt_symbol]),
             None
         )
-
-        if found:
-            settings["contractName"] = found.get("name")
-            settings["contractId"] = found.get("id")
-            settings["contractDesc"] = found.get("description", "")
-
-            log_message(
-                f"Contract set: {found.get('name')} ({found.get('id')}) - {found.get('description', '')}"
-            )
-
-            return jsonify({
-                "status": "ok",
-                "contractName": found.get("name"),
-                "contractId": found.get("id"),
-                "description": found.get("description", "")
-            })
-        else:
+        if not found:
             log_message(f"No contract match found for {symbol} or {alt_symbol}")
             return jsonify({
                 "status": "error",
-                "error": f"Contract '{symbol}' not found. Tried '{alt_symbol}' too."
+                "error": f"Contract '{symbol}' not found."
             }), 404
-
+        settings["contractName"] = found["name"]
+        settings["contractId"] = found["id"]
+        settings["contractDesc"] = found.get("description", "")
+        log_message(f"Contract set: {found['name']} ({found['id']})")
+        return jsonify({"status": "ok", "contract": found})
     except Exception as e:
         log_message(f"Error fetching contract: {e}")
         return jsonify({"error": str(e)}), 500
 
+# ======================================================
+# START / STOP
+# ======================================================
 
-
-@app.route('/start', methods=['POST'])
+@app.route("/start", methods=["POST"])
 def start():
     global running
     running = True
-
-    if settings["contracts"] <= 0 or settings["takeProfit"] <= 0 or settings["stopLoss"] <= 0:
+    
+    print('pleaseeeeee', settings["tpslMethod"])
+    if settings["tpslMethod"] == "ticks" and (settings["contracts"] <= 0 or settings["takeProfit"] <= 0 or settings["stopLoss"] <= 0):
         running = False
-        log_message("Error: You must set your contract size and TP/SL first.")
+        log_message("Error: You must set your contract size and TP/SL first to use ticks method.")
         return jsonify({"success": False}), 400
-
-    log_message("Program started! Connecting to TopstepX live feed...")
+    
     threading.Thread(target=start_userhub, daemon=True).start()
+    threading.Thread(target=heartbeat_monitor, daemon=True).start()
+
+    if settings["tpslMethod"] == "levels":
+        threading.Thread(target=breakeven_monitor, daemon=True).start()
+    log_message("Program started! Connecting to TopstepX live feed...")
 
     log_message("Program ready — now taking in orders!")
     return jsonify({"success": True})
 
+    log_message("Fetching recent bars for test...")
 
-@app.route('/stop', methods=['POST'])
+    # bar = get_3sec_bar(settings["contractId"], settings["token"])
+    # if bar:
+    #     print(f"3-second bar → {bar}")
+
+    # log_message(f"Fetched {len(bars)} bars.")
+    # highs, lows = detect_swings(bars)
+    # bullish_fvgs, bearish_fvgs = detect_fvg(bars)
+    # log_message(f"Detected {len(bullish_fvgs)} bullish and {len(bearish_fvgs)} bearish FVGs.")
+
+    # # === SORT AND PRINT FVGs BY TIME (newest → oldest) ===
+    # print("\n=== Bullish FVGs (Newest → Oldest) ===")
+    # for fvg in sorted(bullish_fvgs, key=lambda x: x["end_time"], reverse=True)[:15]:
+    #     print(f"BULLISH | {fvg['end_time']} | "
+    #         f"Range: {fvg['gap_bottom']} → {fvg['gap_top']}")
+
+    # print("\n=== Bearish FVGs (Newest → Oldest) ===")
+    # for fvg in sorted(bearish_fvgs, key=lambda x: x["end_time"], reverse=True)[:15]:
+    #     print(f"BEARISH | {fvg['end_time']} | "
+    #         f"Range: {fvg['gap_bottom']} → {fvg['gap_top']}")
+
+
+    # # === Sort and Display Recent Swing Points (Newest → Oldest) ===
+    # highs_sorted = sorted(highs, key=lambda x: x["time"], reverse=True)
+    # lows_sorted = sorted(lows, key=lambda x: x["time"], reverse=True)
+
+    # print("\n=== Recent Swing Highs (Newest → Oldest) ===")
+    # for h in highs_sorted[:15]:
+    #     print(f"HIGH | {h['time']} | Price = {h['price']}")
+
+    # print("\n=== Recent Swing Lows (Newest → Oldest) ===")
+    # for l in lows_sorted[:15]:
+    #     print(f"LOW  | {l['time']} | Price = {l['price']}")
+
+    # recent_highs = list(reversed(highs_sorted[-15:]))
+    # recent_lows = list(reversed(lows_sorted[-15:]))
+
+    # entry_price = bars[-1]["c"]
+    # levels = get_levels("bullish", entry_price, recent_highs, recent_lows,
+    #                     bullish_fvgs, bearish_fvgs)
+
+    # log_message(f"Calculated Levels: BE={levels['be']} | TP1={levels['tp1']} "
+    #             f"| TP2={levels['tp2']} | SL={levels['sl']}")
+    # log_message("Test complete (no live trading).")
+    # return jsonify({"success": False}), 400
+
+@app.route("/stop", methods=["POST"])
 def stop():
     global running
     running = False
-    log_message("Bot stopped")
-
+    log_message("Bot stopped.")
     if hub_connection:
         try:
             hub_connection.stop()
-            log_message("[UserHub] Disconnected from live feed.")
+            log_message("[UserHub] Disconnected.")
         except Exception as e:
             log_message(f"[UserHub] Error closing connection: {e}")
-        
     return jsonify({"success": True})
 
-
-@app.route('/logs')
+@app.route("/logs")
 def logs():
-    return Response(generate_logs(), mimetype='text/event-stream')
+    return Response(generate_logs(), mimetype="text/event-stream")
 
+# ======================================================
+# WEBHOOK
+# ======================================================
 
-@app.route('/webhook', methods=['POST'])
+@app.route("/webhook", methods=["POST"])
 def webhook():
     global running
     if not running:
-        log_message("Alert ignored because bot is not running")
+        log_message("Alert ignored; bot not running.")
         return jsonify({"status": "ignored"})
 
     try:
-        if request.is_json:
-            data = request.get_json()
-        else:
-            data = {"message": request.data.decode("utf-8").strip()}
-
+        data = request.get_json() if request.is_json else {"message": request.data.decode("utf-8").strip()}
         log_message(f"Alert received: {data}")
-
+        
         if settings.get("hasPosition"):
-            log_message("Order skipped: already in a position")
+            log_message("Order skipped: already in position.")
             return jsonify({"status": "ignored", "reason": "position open"})
 
         msg = data.get("message", "").lower()
@@ -404,52 +527,421 @@ def webhook():
 
         if order_resp.get("success"):
             return jsonify({"status": "ok", "order": order_resp})
-        elif order_resp.get("success") and not settings.get("hasPosition"):
-            log_message("Failed to create order.")
-            return jsonify({"status": "error", "order": order_resp})
+        log_message("Failed to create order.")
+        return jsonify({"status": "error", "order": order_resp})
 
     except Exception as e:
         log_message(f"Error in webhook: {e}")
         return jsonify({"error": str(e)}), 400
 
+# ======================================================
+# WEBHOOK_IFVG : Uses IFVG strategy (market + limit orders)
+# ======================================================
+@app.route("/webhook_ifvg", methods=["POST"])
+def webhook_ifvg():
+    global running,trade_lock, trade_state
+
+    if not running:
+        log_message("Alert ignored; bot not running.")
+        return jsonify({"status": "ignored"})
+    
+    if trade_lock:
+        log_message("[IFVG] ⚠️ Trade lock active — another order is being processed.")
+        return jsonify({"status": "ignored", "reason": "trade lock active"})
+    
+    if settings.get("hasPosition"):
+            log_message("Order skipped: already in position.")
+            return jsonify({"status": "ignored", "reason": "position open"})
+    
+    trade_lock = True
+
+    try:
+        if request.is_json:
+            data = request.get_json()
+            message = data.get("message", "").lower().strip()
+        else:
+            raw = request.data.decode("utf-8").strip()
+            message = raw.lower()
+            data = {"message": message}
+
+        log_message(f"[IFVG] Alert received: {message}")
+
+        # Direction
+        if "bullish" in message:
+            direction = "bullish"
+            side = 0  # Buy
+        elif "bearish" in message:
+            direction = "bearish"
+            side = 1  # Sell
+        else:
+            log_message("[IFVG] ❌ No direction keyword found. Aborting.")
+            trade_lock = False
+            return jsonify({"error": "Missing 'bullish' or 'bearish' keyword"}), 400
+
+        # If using ticks, place order here and exit
+        if settings["tpslMethod"] == "ticks":
+            tp = settings["takeProfit"] * (1 if side == 0 else -1)
+            sl = settings["stopLoss"] * (-1 if side == 0 else 1)
+
+            order_resp = place_order(
+                settings["accountId"],
+                settings["contractId"],
+                side,
+                settings["contracts"],
+                tp,
+                sl,
+                settings.get("token")
+            )
+
+            trade_lock = False
+            if order_resp.get("success"):
+                return jsonify({"status": "ok", "order": order_resp})
+            log_message("Failed to create order.")
+            return jsonify({"status": "error", "order": order_resp})
+
+        # Timeframe detection
+        timeframe_tokens = [
+            t for t in message.split()
+            if t.endswith(("min", "m", "sec", "s"))
+        ]
+
+        if not timeframe_tokens:
+            log_message("[IFVG] ❌ No valid timeframe found. Aborting.")
+            trade_lock = False
+            return jsonify({"error": "Missing timeframe (e.g. '3min', '5m', '30sec')"}), 400
+
+        try:
+            # Extract numeric portion
+            unit_number = int(''.join(ch for ch in timeframe_tokens[0] if ch.isdigit()))
+            print('uSECONDS', unit_number)
+            # Detect whether it's seconds or minutes
+            is_seconds = "sec" in timeframe_tokens[0] or timeframe_tokens[0].endswith("s")
+            print('is_seconds', is_seconds)
+            # Set appropriate unit code for your API (assuming 2 = minutes, 1 = seconds)
+            unit_type = 1 if is_seconds else 2
+
+            log_message(f"[IFVG] Using timeframe: {unit_number} {'seconds' if is_seconds else 'minutes'}")
+
+        except ValueError:
+            log_message("[IFVG] ❌ Invalid timeframe format. Aborting.")
+            trade_lock = False
+            return jsonify({"error": "Invalid timeframe format"}), 400
+
+        log_message(f"[IFVG] Using timeframe: {unit_number}-minute")
+
+        # === 1. MARKET ENTRY ===
+        log_message(f"[IFVG] Placing {direction.upper()} MARKET order...")
+        order_resp = place_order(
+            settings["accountId"],
+            settings["contractId"],
+            side,
+            settings["contracts"],
+            0,  # TP placeholder
+            0,  # SL placeholder
+            settings["token"],
+            order_type=2  # MARKET
+        )
+        
+        if not order_resp.get("success"):
+            log_message(f"[IFVG] ❌ Market order failed: {order_resp}")
+            trade_lock = False
+            return jsonify({"error": "Market order failed"}), 500
+
+        log_message(f"[IFVG] ✅ Market order placed successfully.")
+
+        # === 1.5 FETCH REAL ENTRY PRICE ===
+        pos_data = get_latest_position(settings["accountId"], settings["token"])
+        if not pos_data:
+            log_message("[IFVG] ⚠️ Position not found after order placement; using fallback candle close.")
+            entry_bar = retrieve_bars(settings["contractId"], settings["token"], unit=unit_type, unit_number=unit_number, limit=1)[-1]
+            entry_price = entry_bar["c"]
+            entry_high = entry_bar["h"]
+            entry_low = entry_bar["l"]
+        else:
+            entry_price = pos_data.get("averagePrice")
+            entry_bar = retrieve_bars(settings["contractId"], settings["token"], unit=unit_type, unit_number=unit_number, limit=1)[-1]
+            entry_price = entry_bar["c"]
+            entry_high = entry_bar["h"]
+            entry_low = entry_bar["l"]
+            log_message(f"[IFVG] 🎯 Entry price set from position data: {entry_price}")
+
+        # === 2. RETRIEVE LEVELS ===
+        bars = retrieve_bars(settings["contractId"], settings["token"], unit=unit_type, unit_number=unit_number, limit=2000)
+        if not bars:
+            log_message("[IFVG] ❌ No bars retrieved. Aborting.")
+            trade_lock = False
+            return jsonify({"error": "Failed to retrieve bars"}), 500
+
+        highs, lows = detect_swings(bars)
+        bullish_fvgs, bearish_fvgs = detect_fvg(bars)
+        # === Sort and Display Recent Swing Points (Newest → Oldest) ===
+        # highs_sorted = sorted(highs, key=lambda x: x["time"], reverse=True)
+        # lows_sorted = sorted(lows, key=lambda x: x["time"], reverse=True)
+
+        # print("\n=== Recent Swing Highs (Newest → Oldest) ===")
+        # for h in highs_sorted[:15]:
+        #     print(f"HIGH | {h['time']} | Price = {h['price']}")
+
+        # print("\n=== Recent Swing Lows (Newest → Oldest) ===")
+        # for l in lows_sorted[:15]:
+        #     print(f"LOW  | {l['time']} | Price = {l['price']}")
+
+        # Sort oldest → newest
+        # highs_sorted = sorted(highs, key=lambda x: x["time"])
+        # lows_sorted = sorted(lows, key=lambda x: x["time"])
+
+        # print("\n=== Oldest Swing Highs (Oldest → Newest) ===")
+        # for h in highs_sorted[:15]:
+        #     print(f"HIGH | {h['time']} | Price = {h['price']}")
+
+        # print("\n=== Oldest Swing Lows (Oldest → Newest) ===")
+        # for l in lows_sorted[:15]:
+        #     print(f"LOW  | {l['time']} | Price = {l['price']}")
+        print(f"[DEBUG] webhook_ifvg id={id(trade_state)}")
+        print(f"[DEBUG] trade_state ({len(trade_state)} keys): {trade_state}")
+        if direction == "bullish":
+            levels = get_levels(direction, entry_high, highs, lows, bullish_fvgs, bearish_fvgs)
+        elif direction == "bearish":
+            levels = get_levels(direction, entry_low, highs, lows, bullish_fvgs, bearish_fvgs)
+        
+        sl_price = levels.get("sl")
+        tp1_price = levels.get("tp1")
+        tp2_price = levels.get("tp2")
+        be_price = levels.get("be")
+        trade_state['be_price'] = be_price
+        # If TP2 doesn't exist, set it to 0.02% beyond TP1 in the direction of the trade
+        if not tp2_price and tp1_price:
+            if direction == "bullish":
+                tp2_price = round(tp1_price * 1.0002, 2)  # +0.02%
+            else:
+                tp2_price = round(tp1_price * 0.9998, 2)  # -0.02%
+
+            log_message(f"[IFVG] ⚠️ No TP2 detected — auto-set to {tp2_price} ({'+' if direction == 'bullish' else '-'}0.02%)")
+            
+        if not sl_price or not tp1_price or not tp2_price:
+            log_message("[IFVG] ❌ Missing one or more TP/SL levels.")
+            trade_lock = False
+            return jsonify({"error": "Invalid SL/TP values"}), 400
+
+        log_message(f"[IFVG] Levels → SL={sl_price} | TP1={tp1_price} | TP2={tp2_price}")
+
+        # === 3. PLACE LIMIT ORDERS ===
+        log_message("[IFVG] Placing TP1, TP2, and SL orders...")
+
+        total_contracts = int(settings["contracts"])
+        tp1_contracts = total_contracts // 2       # lower half for TP1
+        tp2_contracts = total_contracts - tp1_contracts
+
+        # --- LONG (bullish) setup ---
+        if direction == "bullish":
+            # TP1 (Sell Limit)
+            tp1_resp = place_order(
+                settings["accountId"],
+                settings["contractId"],
+                1,  # Sell
+                tp1_contracts,
+                0, 0,
+                settings["token"],
+                price=tp1_price,
+                order_type=1  # LIMIT
+            )
+
+            # TP2 (Sell Limit)
+            tp2_resp = place_order(
+                settings["accountId"],
+                settings["contractId"],
+                1,  # Sell
+                tp2_contracts,
+                0, 0,
+                settings["token"],
+                price=tp2_price,
+                order_type=1  # LIMIT
+            )
+
+            # SL (Sell Stop)
+            sl_resp = place_order(
+                settings["accountId"],
+                settings["contractId"],
+                1,  # Sell
+                total_contracts,
+                0, 0,
+                settings["token"],
+                price=sl_price,
+                order_type=4  # STOP
+            )
+
+        # --- SHORT (bearish) setup ---
+        else:
+            # TP1 (Buy Limit)
+            tp1_resp = place_order(
+                settings["accountId"],
+                settings["contractId"],
+                0,  # Buy
+                tp1_contracts,
+                0, 0,
+                settings["token"],
+                price=tp1_price,
+                order_type=1  # LIMIT
+            )
+
+            # TP2 (Buy Limit)
+            tp2_resp = place_order(
+                settings["accountId"],
+                settings["contractId"],
+                0,  # Buy
+                tp2_contracts,
+                0, 0,
+                settings["token"],
+                price=tp2_price,
+                order_type=1  # LIMIT
+            )
+
+            # SL (Buy Stop)
+            sl_resp = place_order(
+                settings["accountId"],
+                settings["contractId"],
+                0,  # Buy
+                total_contracts,
+                0, 0,
+                settings["token"],
+                price=sl_price,
+                order_type=4  # STOP
+            )
+
+        # --- Record bracket orders in trade_state ---
+        trade_state["tp_orders"] = [
+            tp1_resp.get("orderId"),
+            tp2_resp.get("orderId")
+        ]
+        trade_state["sl_order"] = sl_resp.get("orderId")
+        trade_state["brackets_set"] = True
+
+        # --- Log and return results ---
+        log_message(f"[IFVG] TP1 order response: {tp1_resp}")
+        log_message(f"[IFVG] TP2 order response: {tp2_resp}")
+        log_message(f"[IFVG] SL order response: {sl_resp}")
+
+        trade_lock = False
+
+        return jsonify({
+            "status": "ok",
+            "direction": direction,
+            "timeframe": unit_number,
+            "levels": {"sl": sl_price, "tp1": tp1_price, "tp2": tp2_price},
+            "tp1_response": tp1_resp,
+            "tp2_response": tp2_resp,
+            "sl_response": sl_resp
+        })
+    
+    except Exception as e:
+        log_message(f"[IFVG] Error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 # ======================================================
-# TEST ROUTES (manual trigger buttons)
+# TEST ENDPOINTS
 # ======================================================
-@app.route('/test_long', methods=['POST'])
+
+@app.route("/test_long", methods=["POST"])
 def test_long():
-    """Simulate a bullish TradingView alert"""
-    log_message("TEST: Placing long market order!")
-
-    # Create fake alert payload identical to a real webhook
-    fake_alert = {"message": "1m-15m MNQZ2025: Potential Bullish Candle"}
-
-    with app.test_request_context(
-        '/webhook',
-        method='POST',
-        json=fake_alert
-    ):
-        response = webhook()
+    log_message("TEST: Placing long market order.")
+    # fake_alert = {"message": "1m-15m MNQZ2025: Potential Bullish Candle"}
+    fake_alert = {"message": "Bullish 1min IFVG"}
+    with app.test_request_context("/webhook_ifvg", method="POST", json=fake_alert):
+        response = webhook_ifvg()
         print("Webhook response from /test_long:", response)
     return jsonify({"status": "ok"})
 
-
-@app.route('/test_short', methods=['POST'])
+@app.route("/test_short", methods=["POST"])
 def test_short():
-    """Simulate a bearish TradingView alert"""
-    log_message("TEST: Placing short market order!")
-
-    fake_alert = {"message": "1m-15m MNQZ2025: Potential Bearish Candle"}
-
-    with app.test_request_context(
-        '/webhook',
-        method='POST',
-        json=fake_alert
-    ):
-        response = webhook()
+    log_message("TEST: Placing short market order.")
+    # fake_alert = {"message": "1m-15m MNQZ2025: Potential Bearish Candle"}
+    fake_alert = {"message": "Bearish 30sec IFVG"}
+    with app.test_request_context("/webhook_ifvg", method="POST", json=fake_alert):
+        response = webhook_ifvg()
         print("Webhook response from /test_short:", response)
     return jsonify({"status": "ok"})
 
+# ======================================================
+# Threads
+# ======================================================
+def heartbeat_monitor():
+    """Periodically ping TopstepX to confirm connectivity (silent unless failure)."""
+    url = "https://api.topstepx.com/api/Status/ping"
+    failure_count = 0
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    while True:
+        try:
+            resp = requests.get(url, timeout=5)
+            text = resp.text.strip().lower()
+
+            if resp.ok and text in ("pong", "ok", "healthy", "success"):
+                failure_count = 0  # success — stay quiet
+            else:
+                failure_count += 1
+                log_message(f"[Heartbeat] ⚠️ Unexpected ping response ({text or resp.status_code}) [{failure_count}x]")
+
+        except Exception as e:
+            failure_count += 1
+            log_message(f"[Heartbeat] ❌ Ping error: {e} [{failure_count}x]")
+
+        time.sleep(5)
+
+def breakeven_monitor():
+    global trade_state
+
+    while True:
+        if not trade_state.get("active"):
+            time.sleep(3)
+            continue
+        be_price = trade_state.get("be_price") 
+        if not be_price:
+            time.sleep(3)
+            continue
+        
+        sl_order = trade_state.get("sl_order")
+        if not sl_order:
+            print("[BE] ⚠️ SL order not yet available, skipping this cycle.")
+            time.sleep(3)
+            continue
+
+        bar = get_3sec_bar(settings["contractId"], settings["token"])
+
+        if not bar:
+            time.sleep(3)
+            continue
+        high = float(bar.get("high", 0))
+        low = float(bar.get("low", 0))
+
+        # --- LONG ---
+        if trade_state["direction"] == "long" and high >= be_price:
+            log_message(f"[BE] ✅ Breakeven hit @ {bar['high']}. Moving SL to BE.")
+            modify_order(
+                settings["accountId"],
+                sl_order,
+                new_size=trade_state["entry_size"],
+                token=settings["token"],
+                stop_price=trade_state["entry_price"]
+            )
+            trade_state["be_price"] = None
+
+        # --- SHORT ---
+        elif trade_state["direction"] == "short" and low <= be_price:
+            log_message(f"[BE] ✅ Breakeven hit @ {bar['low']}. Moving SL to BE.")
+            modify_order(
+                settings["accountId"],
+                sl_order,
+                new_size=trade_state["entry_size"],
+                token=settings["token"],
+                stop_price=trade_state["entry_price"]
+            )
+            trade_state["be_price"] = None
+
+        time.sleep(3)
+
+
+
+# ======================================================
+# RUN
+# ======================================================
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)

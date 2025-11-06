@@ -170,3 +170,9 @@ button:hover {
   width: 100%;
   display: block;
 }
+
+.input-wrapper label {
+  margin-right: 12px;
+  font-size: 14px;
+  color: #f2f2f2;
+}

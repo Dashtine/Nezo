@@ -152,10 +152,18 @@ function toggleBot() {
 
 // ===== Settings =====
 function saveSettings() {
+  const selectedMethod = document.querySelector('input[name="tpslMethod"]:checked');
+    if (!selectedMethod) {
+    console.log("No method selected.");
+    return;
+  }
+  const tpslMethod = selectedMethod.value;
+  console.log('tpslMethod' + tpslMethod);
   const settings = {
     contracts: parseInt(document.getElementById('contracts').value),
     takeProfit: parseInt(document.getElementById('takeProfit').value),
-    stopLoss: parseInt(document.getElementById('stopLoss').value)
+    stopLoss: parseInt(document.getElementById('stopLoss').value),
+    tpslMethod: tpslMethod
   };
 
   fetch('/save_settings', {

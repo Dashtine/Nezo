@@ -116,17 +116,23 @@
       <div class="form-group">
         <label for="contracts">Contracts:</label>
         <div class="input-wrapper">
-          <input type="number" id="contracts" name="contracts" placeholder="0">
+          <input type="number" id="contracts" name="contracts" placeholder="0" value=0>
         </div>
 
         <label for="takeProfit">Take Profit:</label>
         <div class="input-wrapper">
-          <input type="number" id="takeProfit" name="takeProfit" placeholder="0">
+          <input type="number" id="takeProfit" name="takeProfit" placeholder="0" value=0>
         </div>
 
         <label for="stopLoss">Stop Loss:</label>
         <div class="input-wrapper">
-          <input type="number" id="stopLoss" name="stopLoss" placeholder="0">
+          <input type="number" id="stopLoss" name="stopLoss" placeholder="0" value=0>
+        </div>
+
+        <label for="tpslMethod">Levels<br>Ticks</label>
+        <div class="input-wrapper">
+          <input type="radio" id="useLevels" name="tpslMethod"  value="levels" checked>
+          <input type="radio" id="useTicks" name="tpslMethod" value="ticks">
         </div>
                 
         <button type="button" class="save" onclick="saveSettings()">Save</button>
