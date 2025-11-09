@@ -30,26 +30,26 @@ def retrieve_bars(contract_id, token, unit=2, unit_number=3, limit=2000):
         if unit == 1:  # seconds (e.g., 30sec)
             # Use current time for freshest bars; don't floor to a previous bucket
             end_utc = now_utc.replace(microsecond=0)
-            start_utc = end_utc - timedelta(seconds=4000 * unit_number)
+            start_utc = end_utc - timedelta(seconds=10000 * unit_number)
         else:  # minutes (e.g., 1m, 3m, 5m)
             if unit_number <= 1:
                 end_utc = now_utc.replace(microsecond=0)
             else:
                 floored_minute = (now_utc.minute // unit_number) * unit_number
                 end_utc = now_utc.replace(minute=floored_minute, second=0, microsecond=0)
-            start_utc = end_utc - timedelta(minutes=4000 * unit_number)
+            start_utc = end_utc - timedelta(minutes=10000 * unit_number)
 
         print(f"Start UTC: {start_utc.isoformat()} | End UTC: {end_utc.isoformat()}")
 
         payload = {
             "contractId": contract_id,
-            "live": False,                   # ✅ use live feed to avoid old bars
+            "live": False,                  
             "startTime": start_utc.isoformat(),
             "endTime": end_utc.isoformat(),
             "unit": unit,                   # 1 = seconds, 2 = minutes
             "unitNumber": unit_number,
             "limit": limit,
-            "includePartialBar": False       # ✅ include most recent forming bar
+            "includePartialBar": False       
         }
 
         resp = requests.post(API_URL, headers=headers, json=payload)

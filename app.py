@@ -33,7 +33,11 @@ settings = {
     "tpslMethod": "",
     "contracts_tp1": 0,
     "contracts_tp2": 0,
+    "backup_tp1": 0,
+    "backup_tp2": 0,
+    "backup_sl": 0,
     "beMethod": "" ,
+    "useMacro": False,
     "propUsername": "",
     "apiKey": "",
     "token": "",
@@ -334,21 +338,39 @@ def get_settings():
 @app.route("/save_settings", methods=["POST"])
 def save_settings():
     data = request.get_json()
+
     settings["contracts"] = int(data.get("contracts", 0))
     settings["tpslMethod"] = str(data.get("tpslMethod", ""))
 
     if settings["tpslMethod"] == "ticks":
         settings["takeProfit"] = int(data.get("takeProfit", 0))
         settings["stopLoss"] = int(data.get("stopLoss", 0))
+        # Reset level-based fields when using ticks
+        settings["contracts_tp1"] = 0
+        settings["contracts_tp2"] = 0
+        settings["beMethod"] = ""
+        settings["backup_tp1"] = 0
+        settings["backup_tp2"] = 0
+        settings["backup_sl"] = 0
     else:
+        # Levels mode
         settings["takeProfit"] = 0
         settings["stopLoss"] = 0
         settings["contracts_tp1"] = int(data.get("contractsTP1", 0))
         settings["contracts_tp2"] = int(data.get("contractsTP2", 0))
         settings["beMethod"] = str(data.get("beMethod", ""))
-    
+        # Backup levels (used if auto levels fail)
+        settings["backup_tp1"] = int(data.get("backupTP1", 0))
+        settings["backup_tp2"] = int(data.get("backupTP2", 0))
+        settings["backup_sl"] = int(data.get("backupSL", 0))
+
+    # Macro time filter toggle
+    settings["useMacro"] = bool(data.get("useMacro", False))
+    print("macro", settings["useMacro"])
+    print("backup_tp1", settings["backup_tp1"])
     log_message("Settings updated.")
     return jsonify({"status": "ok", "settings": settings})
+
 
 @app.route("/set_api_key", methods=["POST"])
 def set_api_key():
@@ -424,6 +446,7 @@ def set_contract():
         settings["contractName"] = found["name"]
         settings["contractId"] = found["id"]
         settings["contractDesc"] = found.get("description", "")
+        print(settings["contractName"])
         log_message(f"Contract set: {found['name']} ({found['id']})")
         return jsonify({"status": "ok", "contract": found})
     except Exception as e:
@@ -700,11 +723,12 @@ def webhook_ifvg():
         if not pos_data:
             log_message("[IFVG] ⚠️ Position not found after order placement; using fallback candle close.")
             entry_bar = retrieve_bars(settings["contractId"], settings["token"], unit=unit_type, unit_number=unit_number, limit=1)[-1]
-            entry_price = entry_bar["h"]
+            entry_price = entry_bar["c"]
         else:
             entry_price = pos_data.get("averagePrice")
             entry_bar = retrieve_bars(settings["contractId"], settings["token"], unit=unit_type, unit_number=unit_number, limit=1)[-1]
-            entry_price = entry_bar["l"]
+            entry_low = entry_bar["l"]
+            entry_high = entry_bar["h"]
 
             log_message(f"[IFVG] 🎯 Entry price set from position data: {entry_price}")
 
@@ -740,22 +764,16 @@ def webhook_ifvg():
         # print("\n=== Oldest Swing Lows (Oldest → Newest) ===")
         # for l in lows_sorted[:15]:
         #     print(f"LOW  | {l['time']} | Price = {l['price']}")
-        print(f"[DEBUG] webhook_ifvg id={id(trade_state)}")
-        print(f"[DEBUG] trade_state ({len(trade_state)} keys): {trade_state}")
+
         if direction == "bullish":
-            levels = get_levels(direction, entry_price, highs, lows, bullish_fvgs, bearish_fvgs)
+            levels = get_levels(direction, entry_high, highs, lows, bullish_fvgs, bearish_fvgs)
         elif direction == "bearish":
-            levels = get_levels(direction, entry_price, highs, lows, bullish_fvgs, bearish_fvgs)
+            levels = get_levels(direction, entry_low, highs, lows, bullish_fvgs, bearish_fvgs)
         
         sl_price = levels.get("sl")
         tp1_price = levels.get("tp1")
         tp2_price = levels.get("tp2")
         be_price = levels.get("be")
-
-        if settings["beMethod"] == "first":
-            trade_state['be_price'] = be_price
-        elif settings["beMethod"] == "tp1":
-            trade_state["be_price"] = tp1_price
 
         # If TP2 doesn't exist, set it to 0.02% beyond TP1 in the direction of the trade
         if not tp2_price and tp1_price:
@@ -765,7 +783,61 @@ def webhook_ifvg():
                 tp2_price = round(tp1_price * 0.9998, 2)  # -0.02%
 
             log_message(f"[IFVG] ⚠️ No TP2 detected — auto-set to {tp2_price} ({'+' if direction == 'bullish' else '-'}0.02%)")
-            
+
+
+        # ----- Use back ups / ticks if levels were not found -----
+        if not tp1_price or not tp2_price or not sl_price:
+            contract = settings.get("contractName", "")
+            direction = direction.lower()
+            entry_price = float(entry_price)
+
+            # If both TP1 and TP2 levels were not found then use backup ticks.    
+            if not tp1_price or not tp2_price:
+                backup_tp1 = int(settings.get("backup_tp1", 20))  # default to 20 ticks if missing
+                backup_tp2 = int(settings.get("backup_tp2", 40))  # default to 40 ticks if missing
+
+                # Tick size detection
+                if "NQ" in contract:
+                    tick_size = 0.25
+                elif "GC" in contract:
+                    tick_size = 0.1
+                else:
+                    tick_size = 0.25  # fallback
+
+                # Direction-based math
+                if direction == "bullish":
+                    tp1_price = entry_price + (backup_tp1 * tick_size)
+                    tp2_price = entry_price + (backup_tp2 * tick_size)
+                elif direction == "bearish":
+                    tp1_price = entry_price - (backup_tp1 * tick_size)
+                    tp2_price = entry_price - (backup_tp2 * tick_size)
+                else:
+                    tp1_price, tp2_price = None, None
+
+                log_message(f"Backup TPs applied for {backup_tp1} & {backup_tp2} ticks")
+
+
+            if not sl_price:
+                backup_sl = int(settings.get("backup_sl", 20))  # default 20 ticks
+
+                # Define tick sizes per product type
+                if "NQ" in contract:
+                    tick_size = 0.25
+                elif "GC" in contract:
+                    tick_size = 0.1
+                else:
+                    tick_size = 0.25  # fallback
+
+                # Calculate stop loss based on direction
+                if direction == "bullish":
+                    sl_price = entry_price - (backup_sl * tick_size)
+                elif direction == "bearish":
+                    sl_price = entry_price + (backup_sl * tick_size)
+                else:
+                    sl_price = None  # unrecognized direction
+
+                log_message(f"Backup SL applied for {backup_sl}")
+
         if not sl_price or not tp1_price or not tp2_price:
             log_message("[IFVG] ❌ Missing one or more TP/SL levels.")
             trade_lock = False
@@ -780,6 +852,11 @@ def webhook_ifvg():
             
         # === 3. PLACE LIMIT ORDERS ===
         log_message("[IFVG] Placing TP1, TP2, and SL orders...")
+
+        if settings["beMethod"] == "first":
+            trade_state['be_price'] = be_price
+        elif settings["beMethod"] == "tp1":
+            trade_state["be_price"] = tp1_price
 
         # --- LONG (bullish) setup ---
         if direction == "bullish":
@@ -1005,5 +1082,7 @@ def breakeven_monitor():
 # RUN
 # ======================================================
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
+    # app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
+    app.run(host="0.0.0.0", port=5000, debug=True)
+
 

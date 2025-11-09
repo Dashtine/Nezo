@@ -178,8 +178,12 @@ function saveSettings() {
     stopLoss: parseInt(document.getElementById('stopLoss').value),
     contractsTP1 : parseInt(document.getElementById('contractsTP1').value),
     contractsTP2 : parseInt(document.getElementById('contractsTP2').value),
+    backupTP1 : parseInt(document.getElementById('backupTP1').value),
+    backupTP2 : parseInt(document.getElementById('backupTP2').value),
+    backupSL : parseInt(document.getElementById('backupSL').value),
     tpslMethod: tpslMethod,
-    beMethod: beMethod
+    beMethod: beMethod,
+    useMacro: document.getElementById('useMacro').checked
   };
 
   fetch('/save_settings', {

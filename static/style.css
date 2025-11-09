@@ -2,12 +2,13 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    height: 100vh;
+    justify-content: flex-start;
+    min-height: 100vh;
     background: linear-gradient(to right, #ece9e6, #ffffff);
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     margin: 0;
 }
+
 
 h1 {
     margin-bottom: 20px;
@@ -48,8 +49,8 @@ button:hover {
 }
 
 #logs {
-    width: 80%;
-    max-width: 800px;
+    width: 100%;
+    max-width: 875px;
     height: 200px;
     margin-top: 20px;
     margin-bottom: 10px;
@@ -68,7 +69,7 @@ button:hover {
     flex-direction: column;
     align-items: flex-start;
     width: 100%;
-    max-width: 800px;
+    max-width: 900px;
 }
 
 .form-group {
@@ -175,4 +176,9 @@ button:hover {
   margin-right: 12px;
   font-size: 14px;
   color: #f2f2f2;
+}
+
+input[disabled] {
+  background-color: #eee;
+  cursor: not-allowed;
 }

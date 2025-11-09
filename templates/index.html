@@ -114,6 +114,24 @@
   <div class="form-container">
     <form id="settingsForm">
       <div class="form-group">
+        <label for="tpslMethod"><b><u>Mode:</u></b></label>
+        <label for="tpslMethod" style="margin-left: 2.8in;">Levels</label>
+        <div class="input-wrapper">
+          <input type="radio" style="margin-top:15px;" id="useLevels" name="tpslMethod"  value="levels" checked>
+        </div>
+        <label for="tpslMethod" style="margin-left: 60px;">Ticks</label>
+        <div class="input-wrapper">
+           <input type="radio" style="margin-top:15px;" id="useTicks" name="tpslMethod" value="ticks">
+        </div>
+        <button type="button" style="margin-left: 2.4in;" class="save" onclick="saveSettings()">Save</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- SETTINGS FOR 'TICKS' MODE -->
+  <div class="form-container">
+    <form id="settingsForm">
+      <div class="form-group">
         <label for="contracts">Contracts:</label>
         <div class="input-wrapper">
           <input type="number" id="contracts" name="contracts" placeholder="0" value=0>
@@ -128,62 +146,148 @@
         <div class="input-wrapper">
           <input type="number" id="stopLoss" name="stopLoss" placeholder="0" value=0>
         </div>
-
-        <label for="tpslMethod">Levels<br>Ticks</label>
-        <div class="input-wrapper">
-          <input type="radio" id="useLevels" name="tpslMethod"  value="levels" checked>
-          <input type="radio" id="useTicks" name="tpslMethod" value="ticks">
-        </div>
-                
-        <button type="button" class="save" onclick="saveSettings()">Save</button>
       </div>
     </form>
   </div>
 
+  <!-- SETTINGS FOR 'LEVELS' MODE -->
   <div class="form-container">
     <div class="form-group">
     <!-- TP Contract Sizes -->
-      <label for="tp1Contracts">TP1 Contracts:</label>
+      <label for="tp1Contracts" style="margin-top:15px;">TP1 Contracts:</label>
       <div class="input-wrapper">
         <input type="number" id="contractsTP1" name="contractsTP1" placeholder="0" value=0>
       </div>
 
-      <label for="tp2Contracts">TP2 Contracts:</label>
+      <label for="tp2Contracts" style="margin-top:15px;">TP2 Contracts:</label>
       <div class="input-wrapper">
         <input type="number" id="contractsTP2" name="contractsTP2" placeholder="0" value=0>
       </div>
     </div>
   </div>
 
- <div class="form-container">
+  <div class="form-container">
     <div class="form-group">
     <!-- Breakeven Flags -->
      <label style="min-width: 140px;">Breakeven Options:</label>
      <label>First Level</label>
       <div class="input-wrapper">
-        <input type="radio" id="beFirstInt" name="beMethod" value="first">
+        <input type="radio" style="max-width: 15px; margin-top:8px;" id="beFirstInt" name="beMethod" value="first">
       </div>  
 
       <label>TP 1</label>
       <div class="input-wrapper">
-        <input type="radio" id="beAtTP1" name="beMethod" value="tp1">
+        <input type="radio" style="max-width: 15px; margin-top:8px;" id="beAtTP1" name="beMethod" value="tp1">
       </div>   
 
       <label>None</label>
       <div class="input-wrapper">
-        <input type="radio" id="beNone" name="beMethod" value="" checked>
+        <input type="radio" style="max-width: 15px; margin-top:8px;" id="beNone" name="beMethod" value="" checked>
       </div>   
       
     </div>  
   </div>
+
+  <!-- ========================== -->
+  <!-- Backup Levels (for Levels mode) -->
+  <!-- ========================== -->
+  <div style="height:10px;"></div> 
+  <div class="form-container">
+      <label class="form-group">
+        Backup Levels (use ticks if no levels are found):
+      </label>
+  </div>
+  <div style="height:10px;"></div> 
+  <div class="form-container" id="backupLevelsSection">
+    <div class="form-group">
+      <div style="height:10px;"></div> 
+      <label for="backupTP1" style="min-width:95px;">Backup TP1</label>
+      <div class="input-wrapper">
+        <input type="number" style="width:80px;" id="backupTP1" name="backupTP1" placeholder="0" value="0">
+      </div>
+
+      <label for="backupTP2" style="min-width:100px;">Backup TP2:</label>
+      <div class="input-wrapper">
+        <input type="number" style="width:80px;" id="backupTP2" name="backupTP2" placeholder="0" value="0">
+      </div>
+
+      <label for="backupSL" style="min-width:95px;">Backup SL:</label>
+      <div class="input-wrapper">
+        <input type="number" style="width:80px;" id="backupSL" name="backupSL" placeholder="0" value="0">
+      </div>
+    </div>
+      <p style="
+    font-size:12px;
+    color:#555;
+    margin-top:8px;
+    margin-left:5px;
+    font-style:italic;
+  ">
+    *If TP1 level is found but TP2 is missing, TP2 will automatically be set 0.02% above or below TP1 (based on direction).*
+  </p>
+  </div>
+
+  <!-- ========================== -->
+  <!-- Additional Settings -->
+  <!-- ========================== -->
+  <div class="form-container">
+    <form id="settingsForm">
+      <div class="form-group" style="display:inline; align-items:center;">
+        <label for="tpslMethod" style="display:inline; font-weight:bold;"><u>Additional Settings</u></label>
+        <div style="height:10px;"></div> 
+        <div style="display:flex; align-items:center; gap:10px;">
+          <label for="useMacro" style="margin:0;">Macro Times Only</label>
+          <input type="checkbox" id="useMacro" name="useMacro">
+        </div>
+    </form>
+  </div>
   <!-- ========================== -->
   <!-- Test Buttons -->
   <!-- ========================== -->
-  <div>   
-    <button id="testlongbtn" style="background-color:rgb(1, 113, 1)" class="start" onclick="TestLong()">Test Long</button>
-    <button id="testshortbtn" style="background-color:rgb(173, 14, 14)" class="start" onclick="TestShort()">Test Short</button>
-  </div> 
+  <div style="height:20px;"></div> 
+  <div style="margin-left:3.3in;">
+    <button id="testlongbtn" style="background-color:rgb(1,113,1);" class="start" onclick="TestLong()">Test Long</button>
+    <button id="testshortbtn" style="background-color:rgb(173,14,14);" class="start" onclick="TestShort()">Test Short</button>
+  </div>
+
 
   <script src="{{ url_for('static', filename='script.js') }}"></script>
+  <script>
+document.addEventListener("DOMContentLoaded", () => {
+  const levelsRadio = document.getElementById("useLevels");
+  const ticksRadio = document.getElementById("useTicks");
+
+  // Sections
+  const ticksSettings = document.querySelectorAll("#contracts, #takeProfit, #stopLoss");
+  const levelsSettings = document.querySelectorAll(
+  "#contractsTP1, #contractsTP2, #beFirstInt, #beAtTP1, #beNone, #backupTP1, #backupTP2, #backupSL"
+);
+
+
+  function updateSettingsState() {
+    const useLevels = levelsRadio.checked;
+
+    // Enable/disable Ticks settings
+    ticksSettings.forEach(input => {
+      input.disabled = useLevels;
+      input.style.opacity = useLevels ? "0.5" : "1";
+    });
+
+    // Enable/disable Levels settings
+    levelsSettings.forEach(input => {
+      input.disabled = !useLevels;
+      input.style.opacity = !useLevels ? "0.5" : "1";
+    });
+  }
+
+  // Run when the page loads
+  updateSettingsState();
+
+  // Add listeners
+  levelsRadio.addEventListener("change", updateSettingsState);
+  ticksRadio.addEventListener("change", updateSettingsState);
+});
+</script>
+
 </body>
 </html>
