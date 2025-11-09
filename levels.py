@@ -67,11 +67,11 @@ def retrieve_bars(contract_id, token, unit=2, unit_number=3, limit=2000):
         bars_sorted = sorted(bars, key=lambda b: b["t"])
 
         # Debug print for last 10 candles
-        recent_10 = list(reversed(bars_sorted[-10:]))
-        print("\n=== Most Recent 10 Candles ===")
-        for bar in recent_10:
-            print(f"{bar['t']} | O={bar['o']} H={bar['h']} L={bar['l']} C={bar['c']}")
-        print("=========================================\n")
+        # recent_10 = list(reversed(bars_sorted[-10:]))
+        # print("\n=== Most Recent 10 Candles ===")
+        # for bar in recent_10:
+        #     print(f"{bar['t']} | O={bar['o']} H={bar['h']} L={bar['l']} C={bar['c']}")
+        # print("=========================================\n")
 
         return bars_sorted
 
@@ -215,8 +215,8 @@ def get_levels(direction, entry_price, highs, lows, bullish_fvgs, bearish_fvgs):
         for low in reversed(sorted_lows):
             if low["price"] < entry_price - EPS:
                 sl = low["price"]
-                # sl_time = low["time"]
-                # print(f"[Levels] SL chosen from swing low → Time: {sl_time} | Price: {sl}")
+                sl_time = low["time"]
+                print(f"[Levels] SL chosen from swing low → Time: {sl_time} | Price: {sl}")
                 break
 
     else:
@@ -226,8 +226,8 @@ def get_levels(direction, entry_price, highs, lows, bullish_fvgs, bearish_fvgs):
         for high in reversed(sorted_highs):
             if high["price"] > entry_price + EPS:
                 sl = high["price"]
-                # sl_time = high["time"]
-                # print(f"[Levels] SL chosen from swing high → Time: {sl_time} | Price: {sl}")
+                sl_time = high["time"]
+                print(f"[Levels] SL chosen from swing high → Time: {sl_time} | Price: {sl}")
                 break
 
 

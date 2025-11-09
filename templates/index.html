@@ -140,6 +140,42 @@
     </form>
   </div>
 
+  <div class="form-container">
+    <div class="form-group">
+    <!-- TP Contract Sizes -->
+      <label for="tp1Contracts">TP1 Contracts:</label>
+      <div class="input-wrapper">
+        <input type="number" id="contractsTP1" name="contractsTP1" placeholder="0" value=0>
+      </div>
+
+      <label for="tp2Contracts">TP2 Contracts:</label>
+      <div class="input-wrapper">
+        <input type="number" id="contractsTP2" name="contractsTP2" placeholder="0" value=0>
+      </div>
+    </div>
+  </div>
+
+ <div class="form-container">
+    <div class="form-group">
+    <!-- Breakeven Flags -->
+     <label style="min-width: 140px;">Breakeven Options:</label>
+     <label>First Level</label>
+      <div class="input-wrapper">
+        <input type="radio" id="beFirstInt" name="beMethod" value="first">
+      </div>  
+
+      <label>TP 1</label>
+      <div class="input-wrapper">
+        <input type="radio" id="beAtTP1" name="beMethod" value="tp1">
+      </div>   
+
+      <label>None</label>
+      <div class="input-wrapper">
+        <input type="radio" id="beNone" name="beMethod" value="" checked>
+      </div>   
+      
+    </div>  
+  </div>
   <!-- ========================== -->
   <!-- Test Buttons -->
   <!-- ========================== -->

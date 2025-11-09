@@ -137,6 +137,14 @@ function toggleBot() {
     takeProfit.disabled = true;
     stopLoss.disabled = true;
     saveBtn.disabled = true;
+    useLevels.disabled = true;
+    useTicks.disabled = true;
+    contractsTP1.disabled = true;
+    contractsTP2.disabled = true;
+    beFirstInt.disabled = true;
+    beAtTP1.disabled = true;
+    beNone.disabled = true;
+    
     fetch('/start', { method: 'POST' });
   } else {
     button.classList.remove('stop');
@@ -146,6 +154,13 @@ function toggleBot() {
     takeProfit.disabled = false;
     stopLoss.disabled = false;
     saveBtn.disabled = false;
+    useLevels.disabled = false;
+    useTicks.disabled = false;
+    contractsTP1.disabled = false;
+    contractsTP2.disabled = false;
+    beFirstInt.disabled = false;
+    beAtTP1.disabled = false;
+    beNone.disabled = false;
     fetch('/stop', { method: 'POST' });
   }
 }
@@ -153,17 +168,18 @@ function toggleBot() {
 // ===== Settings =====
 function saveSettings() {
   const selectedMethod = document.querySelector('input[name="tpslMethod"]:checked');
-    if (!selectedMethod) {
-    console.log("No method selected.");
-    return;
-  }
+  const selectedBE = document.querySelector('input[name="beMethod"]:checked');
+
   const tpslMethod = selectedMethod.value;
-  console.log('tpslMethod' + tpslMethod);
+  const beMethod = selectedBE.value;
   const settings = {
     contracts: parseInt(document.getElementById('contracts').value),
     takeProfit: parseInt(document.getElementById('takeProfit').value),
     stopLoss: parseInt(document.getElementById('stopLoss').value),
-    tpslMethod: tpslMethod
+    contractsTP1 : parseInt(document.getElementById('contractsTP1').value),
+    contractsTP2 : parseInt(document.getElementById('contractsTP2').value),
+    tpslMethod: tpslMethod,
+    beMethod: beMethod
   };
 
   fetch('/save_settings', {
