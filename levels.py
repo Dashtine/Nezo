@@ -19,9 +19,10 @@ def fmt_swing_list(swings, label):
 # ======================================================
 # BAR FETCHER
 # ======================================================
-def retrieve_bars(contract_id, token, unit=2, unit_number=3, limit=2000):
+def retrieve_bars(contract_id, token, unit=2, unit_number=3, limit=10000):
     """Fetch recent bars from TopstepX API (supports seconds or minutes, all UTC)."""
-    print(f"[Bars] unit={unit} | unit_number={unit_number}")
+    # print(f"[Bars] limit={limit} | unit_number={unit_number}")
+
     try:
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
         now_utc = datetime.now(timezone.utc)
@@ -30,7 +31,7 @@ def retrieve_bars(contract_id, token, unit=2, unit_number=3, limit=2000):
         if unit == 1:  # seconds (e.g., 30sec)
             # Use current time for freshest bars; don't floor to a previous bucket
             end_utc = now_utc.replace(microsecond=0)
-            start_utc = end_utc - timedelta(seconds=10000 * unit_number)
+            start_utc = end_utc - timedelta(seconds=43200 * unit_number)
         else:  # minutes (e.g., 1m, 3m, 5m)
             if unit_number <= 1:
                 end_utc = now_utc.replace(microsecond=0)

@@ -75,7 +75,7 @@ button:hover {
 .form-group {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 15px;
+    margin-bottom: 30px;
     width: 100%;
 }
 
@@ -89,6 +89,23 @@ button:hover {
     padding-right: 10px;
 }
 
+.sessions {
+    font-size: 1.1em;
+    color: #333;
+    padding-right: 10px;
+    margin-bottom: 30px;
+}
+
+.times {
+    padding: 10px;
+    font-size: 1.1em;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    width: 20%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-sizing: border-box;
+    padding-right: 20px; /* Add padding to the right for the % symbol */
+}
 
 .save {
     background-color: #007BFF;

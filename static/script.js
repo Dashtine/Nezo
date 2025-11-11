@@ -129,38 +129,62 @@ function toggleBot() {
   const stopLoss = document.getElementById('stopLoss');
   const saveBtn = document.querySelector('.save');
 
+  // existing input groups
+  const useLevels = document.getElementById('useLevels');
+  const useTicks = document.getElementById('useTicks');
+  const contractsTP1 = document.getElementById('contractsTP1');
+  const contractsTP2 = document.getElementById('contractsTP2');
+  const beFirstInt = document.getElementById('beFirstInt');
+  const beAtTP1 = document.getElementById('beAtTP1');
+  const beNone = document.getElementById('beNone');
+  const backupTP1 = document.getElementById('backupTP1');
+  const backupTP2 = document.getElementById('backupTP2');
+  const backupSL = document.getElementById('backupSL');
+  const useMacro = document.getElementById('useMacro');
+
+  // new session inputs
+  const sessionFields = [
+    "session1_enabled", "session1_start", "session1_end",
+    "session2_enabled", "session2_start", "session2_end",
+    "session3_enabled", "session3_start", "session3_end"
+  ].map(id => document.getElementById(id));
+
   if (isStarted) {
+    // ---- Start bot ----
     button.classList.remove('start');
     button.classList.add('stop');
     button.textContent = 'Stop';
-    contracts.disabled = true;
-    takeProfit.disabled = true;
-    stopLoss.disabled = true;
-    saveBtn.disabled = true;
-    useLevels.disabled = true;
-    useTicks.disabled = true;
-    contractsTP1.disabled = true;
-    contractsTP2.disabled = true;
-    beFirstInt.disabled = true;
-    beAtTP1.disabled = true;
-    beNone.disabled = true;
-    
+
+    // disable inputs
+    [
+      contracts, takeProfit, stopLoss, saveBtn,
+      useLevels, useTicks,
+      contractsTP1, contractsTP2,
+      beFirstInt, beAtTP1, beNone,
+      backupTP1, backupTP2, backupSL,
+      useMacro,
+      ...sessionFields
+    ].forEach(el => el.disabled = true);
+
     fetch('/start', { method: 'POST' });
+
   } else {
+    // ---- Stop bot ----
     button.classList.remove('stop');
     button.classList.add('start');
     button.textContent = 'Start';
-    contracts.disabled = false;
-    takeProfit.disabled = false;
-    stopLoss.disabled = false;
-    saveBtn.disabled = false;
-    useLevels.disabled = false;
-    useTicks.disabled = false;
-    contractsTP1.disabled = false;
-    contractsTP2.disabled = false;
-    beFirstInt.disabled = false;
-    beAtTP1.disabled = false;
-    beNone.disabled = false;
+
+    // re-enable inputs
+    [
+      contracts, takeProfit, stopLoss, saveBtn,
+      useLevels, useTicks,
+      contractsTP1, contractsTP2,
+      beFirstInt, beAtTP1, beNone,
+      backupTP1, backupTP2, backupSL,
+      useMacro,
+      ...sessionFields
+    ].forEach(el => el.disabled = false);
+
     fetch('/stop', { method: 'POST' });
   }
 }
@@ -183,7 +207,25 @@ function saveSettings() {
     backupSL : parseInt(document.getElementById('backupSL').value),
     tpslMethod: tpslMethod,
     beMethod: beMethod,
-    useMacro: document.getElementById('useMacro').checked
+    useMacro: document.getElementById('useMacro').checked,
+
+    sessions: [
+      {
+        enabled: document.getElementById('session1_enabled').checked,
+        start: document.getElementById('session1_start').value,
+        end: document.getElementById('session1_end').value
+      },
+      {
+        enabled: document.getElementById('session2_enabled').checked,
+        start: document.getElementById('session2_start').value,
+        end: document.getElementById('session2_end').value
+      },
+      {
+        enabled: document.getElementById('session3_enabled').checked,
+        start: document.getElementById('session3_start').value,
+        end: document.getElementById('session3_end').value
+      }
+    ]
   };
 
   fetch('/save_settings', {

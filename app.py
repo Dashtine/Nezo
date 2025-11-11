@@ -36,8 +36,13 @@ settings = {
     "backup_tp1": 0,
     "backup_tp2": 0,
     "backup_sl": 0,
-    "beMethod": "" ,
+    "beMethod": "",
     "useMacro": False,
+    "sessions": [ 
+        {"enabled": False, "start": "06:29", "end": "12:41"},
+        {"enabled": False, "start": "16:59", "end": "21:01"},
+        {"enabled": False, "start": "11:59", "end": "02:01"}
+    ],
     "propUsername": "",
     "apiKey": "",
     "token": "",
@@ -47,7 +52,6 @@ settings = {
     "contractName": "",
     "contractId": "",
     "contractDesc": ""
-
 }
 
 # ======================================================
@@ -73,6 +77,8 @@ trade_lock = False
 log_messages = []
 hub_connection = None
 running_breakeven = False
+macro_time_active = False
+in_ny_session = False
 stop_event = threading.Event()
 threads = {}  # store all active background threads
 # ======================================================
@@ -366,8 +372,28 @@ def save_settings():
 
     # Macro time filter toggle
     settings["useMacro"] = bool(data.get("useMacro", False))
-    print("macro", settings["useMacro"])
-    print("backup_tp1", settings["backup_tp1"])
+
+    # --- Custom Sessions ---
+    sessions = data.get("sessions", [])
+    parsed_sessions = []
+
+    for i, s in enumerate(sessions, start=1):
+        try:
+            parsed_sessions.append({
+                "enabled": bool(s.get("enabled", False)),
+                "start": str(s.get("start", "")),
+                "end": str(s.get("end", ""))
+            })
+        except Exception as e:
+            log_message(f"[Settings] Error parsing session {i}: {e}")
+            parsed_sessions.append({
+                "enabled": False,
+                "start": "",
+                "end": ""
+            })
+
+    settings["sessions"] = parsed_sessions
+
     log_message("Settings updated.")
     return jsonify({"status": "ok", "settings": settings})
 
@@ -471,8 +497,12 @@ def start():
     # only start threads if they aren’t already alive
     start_thread("userhub", start_userhub)
     start_thread("heartbeat", heartbeat_monitor)
+    start_thread("macro_time", macro_time_tracker)
+
     if settings["tpslMethod"] == "levels":
         start_thread("breakeven", breakeven_monitor)
+
+
 
     log_message("Program started! Connecting to TopstepX live feed...")
 
@@ -603,7 +633,7 @@ def webhook():
 # ======================================================
 @app.route("/webhook_ifvg", methods=["POST"])
 def webhook_ifvg():
-    global running,trade_lock, trade_state
+    global running,trade_lock, trade_state, in_ny_session
 
     if not running:
         log_message("Alert ignored; bot not running.")
@@ -616,6 +646,12 @@ def webhook_ifvg():
     if settings.get("hasPosition"):
             log_message("Order skipped: already in position.")
             return jsonify({"status": "ignored", "reason": "position open"})
+    
+    # Only take trades when macro_time_active is True
+    if not macro_time_active:
+        log_message("[IFVG] ⏰ Ignored alert — outside allowed time window.")
+        return jsonify({"status": "ignored"})
+
     
     trade_lock = True
 
@@ -677,21 +713,18 @@ def webhook_ifvg():
         try:
             # Extract numeric portion
             unit_number = int(''.join(ch for ch in timeframe_tokens[0] if ch.isdigit()))
-            print('uSECONDS', unit_number)
-            # Detect whether it's seconds or minutes
             is_seconds = "sec" in timeframe_tokens[0] or timeframe_tokens[0].endswith("s")
-            print('is_seconds', is_seconds)
             # Set appropriate unit code for your API (assuming 2 = minutes, 1 = seconds)
             unit_type = 1 if is_seconds else 2
 
-            log_message(f"[IFVG] Using timeframe: {unit_number} {'seconds' if is_seconds else 'minutes'}")
 
         except ValueError:
             log_message("[IFVG] ❌ Invalid timeframe format. Aborting.")
             trade_lock = False
             return jsonify({"error": "Invalid timeframe format"}), 400
 
-        log_message(f"[IFVG] Using timeframe: {unit_number}-minute")
+        
+        log_message(f"[IFVG] Using timeframe: {unit_number} {'seconds' if is_seconds else 'minutes'}")
 
         tp1_contracts = settings["contracts_tp1"]
         tp2_contracts = settings["contracts_tp2"]
@@ -733,7 +766,11 @@ def webhook_ifvg():
             log_message(f"[IFVG] 🎯 Entry price set from position data: {entry_price}")
 
         # === 2. RETRIEVE LEVELS ===
-        bars = retrieve_bars(settings["contractId"], settings["token"], unit=unit_type, unit_number=unit_number, limit=2000)
+        if unit_type == 2:
+            bars = retrieve_bars(settings["contractId"], settings["token"], unit=unit_type, unit_number=unit_number, limit=10000)
+        elif unit_type == 1:
+            bars = retrieve_bars(settings["contractId"], settings["token"], unit=unit_type, unit_number=unit_number, limit=5000)
+
         if not bars:
             log_message("[IFVG] ❌ No bars retrieved. Aborting.")
             trade_lock = False
@@ -744,10 +781,11 @@ def webhook_ifvg():
         # === Sort and Display Recent Swing Points (Newest → Oldest) ===
         # highs_sorted = sorted(highs, key=lambda x: x["time"], reverse=True)
         # lows_sorted = sorted(lows, key=lambda x: x["time"], reverse=True)
-
+        # print('entry_high', entry_high)
         # print("\n=== Recent Swing Highs (Newest → Oldest) ===")
         # for h in highs_sorted[:15]:
-        #     print(f"HIGH | {h['time']} | Price = {h['price']}")
+        #     if h['price'] > entry_high:
+        #         print(f"HIGH | {h['time']} | Price = {h['price']}")
 
         # print("\n=== Recent Swing Lows (Newest → Oldest) ===")
         # for l in lows_sorted[:15]:
@@ -775,16 +813,6 @@ def webhook_ifvg():
         tp2_price = levels.get("tp2")
         be_price = levels.get("be")
 
-        # If TP2 doesn't exist, set it to 0.02% beyond TP1 in the direction of the trade
-        if not tp2_price and tp1_price:
-            if direction == "bullish":
-                tp2_price = round(tp1_price * 1.0002, 2)  # +0.02%
-            else:
-                tp2_price = round(tp1_price * 0.9998, 2)  # -0.02%
-
-            log_message(f"[IFVG] ⚠️ No TP2 detected — auto-set to {tp2_price} ({'+' if direction == 'bullish' else '-'}0.02%)")
-
-
         # ----- Use back ups / ticks if levels were not found -----
         if not tp1_price or not tp2_price or not sl_price:
             contract = settings.get("contractName", "")
@@ -793,8 +821,8 @@ def webhook_ifvg():
 
             # If both TP1 and TP2 levels were not found then use backup ticks.    
             if not tp1_price or not tp2_price:
-                backup_tp1 = int(settings.get("backup_tp1", 20))  # default to 20 ticks if missing
-                backup_tp2 = int(settings.get("backup_tp2", 40))  # default to 40 ticks if missing
+                backup_tp1 = settings["backup_tp1"]
+                backup_tp2 = settings["backup_tp2"]
 
                 # Tick size detection
                 if "NQ" in contract:
@@ -818,7 +846,7 @@ def webhook_ifvg():
 
 
             if not sl_price:
-                backup_sl = int(settings.get("backup_sl", 20))  # default 20 ticks
+                backup_sl = settings["backup_sl"]
 
                 # Define tick sizes per product type
                 if "NQ" in contract:
@@ -971,7 +999,7 @@ def webhook_ifvg():
 def test_long():
     log_message("TEST: Placing long market order.")
     # fake_alert = {"message": "1m-15m MNQZ2025: Potential Bullish Candle"}
-    fake_alert = {"message": "Bullish 1min IFVG"}
+    fake_alert = {"message": "Bullish 30sec IFVG"}
     with app.test_request_context("/webhook_ifvg", method="POST", json=fake_alert):
         response = webhook_ifvg()
         print("Webhook response from /test_long:", response)
@@ -1076,6 +1104,53 @@ def breakeven_monitor():
         stop_event.wait(5)
     log_message("[BE Monitor] exited.")
 
+def macro_time_tracker():
+    global macro_time_active, running
+    tz = ZoneInfo("America/Los_Angeles")
+
+    while running:
+        now = datetime.now(tz)
+        hour, minute = now.hour, now.minute
+        current_minutes = hour * 60 + minute
+
+        use_macro = settings.get("useMacro", False)
+        sessions = settings.get("sessions", [])
+
+        in_session = False
+        for idx, s in enumerate(sessions, start=1):
+            if not s.get("enabled"):
+                continue
+
+            try:
+                start_h, start_m = map(int, s.get("start", "00:00").split(":"))
+                end_h, end_m = map(int, s.get("end", "00:00").split(":"))
+                start_total = start_h * 60 + start_m
+                end_total = end_h * 60 + end_m
+
+                if start_total <= end_total:
+                    active = start_total <= current_minutes < end_total
+                else:
+                    active = current_minutes >= start_total or current_minutes < end_total
+
+                if active:
+                    in_session = True
+                    break
+            except Exception as e:
+                log_message(f"[Macro] Invalid session format: {e}")
+
+        # NY session window
+        ny_start = 6 * 60 + 20
+        ny_end = 13 * 60 + 10
+        in_ny = ny_start <= current_minutes < ny_end
+
+        if use_macro and in_ny:
+            macro_window = (10 <= minute < 20) or (20 <= minute < 40)
+        else:
+            macro_window = True
+
+        macro_time_active = in_session and macro_window
+
+        time.sleep(1)
 
 
 # ======================================================

@@ -216,15 +216,9 @@
         <input type="number" style="width:80px;" id="backupSL" name="backupSL" placeholder="0" value="0">
       </div>
     </div>
-      <p style="
-    font-size:12px;
-    color:#555;
-    margin-top:8px;
-    margin-left:5px;
-    font-style:italic;
-  ">
-    *If TP1 level is found but TP2 is missing, TP2 will automatically be set 0.02% above or below TP1 (based on direction).*
-  </p>
+    <p style="font-size:12px; color:#555; margin-top:8px; margin-left:5px; font-style:italic;">
+      *If TP1 level is found but TP2 is missing, TP2 will automatically be set 0.02% above or below TP1 (based on direction).*
+    </p>
   </div>
 
   <!-- ========================== -->
@@ -238,7 +232,40 @@
         <div style="display:flex; align-items:center; gap:10px;">
           <label for="useMacro" style="margin:0;">Macro Times Only</label>
           <input type="checkbox" id="useMacro" name="useMacro">
+          <p style="font-size:12px; color:#555; margin-top:8px; margin-left:5px; font-style:italic;">
+          *Only works for NY session with first macro at 06:20 and last one at 12:50. For Asian/London, macro times are ignored.*
+          </p>
         </div>
+      </div>
+      <div class="sessions">
+        <div style="height:10px;"></div> 
+            <!-- Custom Session 1 -->
+        <div style="margin-bottom: 15px;">
+          <label>Session 1:</label>
+          <input type="checkbox" id="session1_enabled" name="session1_enabled" checked>
+          <input class="times" type="time" id="session1_start" name="session1_start" value="06:29">
+          <span>–</span>
+          <input class="times" type="time" id="session1_end" name="session1_end" value="12:41">
+        </div>
+
+        <!-- Custom Session 2 -->
+        <div style="margin-bottom: 15px;">
+          <label>Session 2:</label>
+          <input type="checkbox" id="session2_enabled" name="session2_enabled" style="">
+          <input class="times" type="time" id="session2_start" name="session2_start" value="16:59">
+          <span>  –  </span>
+          <input class="times" type="time" id="session2_end" name="session2_end" value="21:01">
+        </div>
+
+        <!-- Custom Session 3 -->
+        <div style="margin-bottom: 15px;">
+          <label>Session 3:</label>
+          <input type="checkbox" id="session3_enabled" name="session3_enabled">
+          <input class="times" type="time" id="session3_start" name="session3_start" value="11:59">
+          <span>– </span>
+          <input class="times" type="time" id="session3_end" name="session3_end" value="02:01">
+        </div>    
+      </div>
     </form>
   </div>
   <!-- ========================== -->
