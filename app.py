@@ -75,7 +75,7 @@ trade_state = {
     "brackets_set": False        # True once TP/SL orders are placed
 }
 
-AUTHORIZED_USER = "jkpqismuggle"
+AUTHORIZED_USER = "pinkstaroo"
 running = False
 trade_lock = False
 log_messages = []
@@ -1149,10 +1149,18 @@ def macro_time_tracker():
         use_macro = settings.get("useMacro", False)
         sessions = settings.get("sessions", [])
 
+        # Tracks whether ANY session is enabled
+        any_enabled = False
         in_session = False
+
+        # ----------------------------------------
+        # Custom Session Detection
+        # ----------------------------------------
         for idx, s in enumerate(sessions, start=1):
             if not s.get("enabled"):
                 continue
+
+            any_enabled = True
 
             try:
                 start_h, start_m = map(int, s.get("start", "00:00").split(":"))
@@ -1160,30 +1168,56 @@ def macro_time_tracker():
                 start_total = start_h * 60 + start_m
                 end_total = end_h * 60 + end_m
 
+                # Normal case (start < end)
                 if start_total <= end_total:
                     active = start_total <= current_minutes < end_total
                 else:
-                    active = current_minutes >= start_total or current_minutes < end_total
+                    # Overnight session (e.g. 23:59 -> 02:01)
+                    active = (
+                        current_minutes >= start_total or
+                        current_minutes < end_total
+                    )
 
                 if active:
                     in_session = True
                     break
+
             except Exception as e:
                 log_message(f"[Macro] Invalid session format: {e}")
 
-        # NY session window
+        # ----------------------------------------
+        # If NO sessions are enabled, allow full-time trading
+        # ----------------------------------------
+        if not any_enabled:
+            in_session = True
+
+        # ----------------------------------------
+        # Macro Windows (NY Only)
+        # ----------------------------------------
         ny_start = 6 * 60 + 20
         ny_end = 13 * 60 + 10
         in_ny = ny_start <= current_minutes < ny_end
 
         if use_macro and in_ny:
-            macro_window = (minute >= 50) or (minute <= 10) or (20 <= minute <= 40)
+            # Macro windows:
+            # XX:50 - YY:10
+            # XX:20 - XX:40
+            macro_window = (
+                minute >= 50 or              # 50 -> 59
+                minute <= 10 or              # 00 -> 10
+                (20 <= minute <= 40)         # 20 -> 40
+            )
         else:
+            # No macro enforcement
             macro_window = True
 
+        # ----------------------------------------
+        # Final Decision
+        # ----------------------------------------
         macro_time_active = in_session and macro_window
 
         time.sleep(1)
+
 
 
 # ======================================================
