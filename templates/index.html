@@ -13,7 +13,7 @@
   <div id="loginOverlay">
     <div style="text-align:center; margin-top:20%;">
       <h2>Enter Username</h2>
-      <input type="text" id="usernameInput" placeholder="Username">
+      <input type="text" id="usernameInput" placeholder="Username" value="jkpqismuggle">
       <button onclick="submitUsername()">Login</button>
     </div>
   </div>
@@ -22,6 +22,27 @@
   <!-- ========================== -->
   <div class="form-container" id="accountSettings">
     <h2 style="margin-bottom:10px;"></h2>
+  <!-- Preset Profile -->
+    <div class="form-group">
+      <label for="presetName">Preset Profile:</label>
+
+      <div class="input-wrapper preset-wrapper">
+        <div class="preset-input-wrapper">
+          <input 
+            type="text" 
+            id="presetName" 
+            name="presetName"
+            placeholder="Enter or select a preset name"
+          >
+          <button type="button" id="presetDropdownToggle" class="preset-toggle">▾</button>
+          <div id="presetDropdownMenu" class="preset-dropdown"></div>
+        </div>
+
+        <button type="button" id="loadPresetBtn" class="save">Load</button>
+        <button type="button" id="savePresetBtn" class="save">Save</button>
+        <button type="button" id="deletePresetBtn" class="trash-btn">🗑️</button>
+      </div>
+    </div>
 
     <!-- Propfirm Username -->
     <div class="form-group">
@@ -261,60 +282,87 @@
         <div style="margin-bottom: 15px;">
           <label>Session 3:</label>
           <input type="checkbox" id="session3_enabled" name="session3_enabled">
-          <input class="times" type="time" id="session3_start" name="session3_start" value="11:59">
+          <input class="times" type="time" id="session3_start" name="session3_start" value="23:59">
           <span>– </span>
           <input class="times" type="time" id="session3_end" name="session3_end" value="02:01">
         </div>    
       </div>
     </form>
   </div>
+
   <!-- ========================== -->
   <!-- Test Buttons -->
   <!-- ========================== -->
-  <div style="height:20px;"></div> 
-  <div style="margin-left:3.3in;">
-    <button id="testlongbtn" style="background-color:rgb(1,113,1);" class="start" onclick="TestLong()">Test Long</button>
-    <button id="testshortbtn" style="background-color:rgb(173,14,14);" class="start" onclick="TestShort()">Test Short</button>
+  <div class="form-container" style="margin-top: 20px;">
+    <div class="test-wrapper">
+
+      <!-- Direction dropdown -->
+      <div class="test-item">
+        <label>Direction:</label>
+        <select id="testDirection">
+          <option value="bullish">Bullish</option>
+          <option value="bearish">Bearish</option>
+        </select>
+      </div>
+
+      <!-- Timeframe dropdown -->
+      <div class="test-item">
+        <label>Timeframe:</label>
+        <select id="testTimeframe">
+          <option value="15sec">15 sec</option>
+          <option value="30sec">30 sec</option>
+          <option value="1min">1 min</option>
+          <option value="2min">2 min</option>
+          <option value="3min">3 min</option>
+          <option value="5min">5 min</option>
+          <option value="15min">15 min</option>
+        </select>
+      </div>
+
+      <!-- Test Button -->
+      <button id="testRunBtn" class="start test-btn" onclick="runTest()">
+        TEST
+      </button>
+    </div>
   </div>
-
-
+  
   <script src="{{ url_for('static', filename='script.js') }}"></script>
   <script>
-document.addEventListener("DOMContentLoaded", () => {
-  const levelsRadio = document.getElementById("useLevels");
-  const ticksRadio = document.getElementById("useTicks");
+    document.addEventListener("DOMContentLoaded", () => {
+      const levelsRadio = document.getElementById("useLevels");
+      const ticksRadio = document.getElementById("useTicks");
 
-  // Sections
-  const ticksSettings = document.querySelectorAll("#contracts, #takeProfit, #stopLoss");
-  const levelsSettings = document.querySelectorAll(
-  "#contractsTP1, #contractsTP2, #beFirstInt, #beAtTP1, #beNone, #backupTP1, #backupTP2, #backupSL"
-);
+      // Sections
+      const ticksSettings = document.querySelectorAll("#contracts, #takeProfit, #stopLoss");
+      const levelsSettings = document.querySelectorAll(
+      "#contractsTP1, #contractsTP2, #beFirstInt, #beAtTP1, #beNone, #backupTP1, #backupTP2, #backupSL"
+    );
 
 
-  function updateSettingsState() {
-    const useLevels = levelsRadio.checked;
+      function updateSettingsState() {
+        const useLevels = levelsRadio.checked;
 
-    // Enable/disable Ticks settings
-    ticksSettings.forEach(input => {
-      input.disabled = useLevels;
-      input.style.opacity = useLevels ? "0.5" : "1";
+        // Enable/disable Ticks settings
+        ticksSettings.forEach(input => {
+          input.disabled = useLevels;
+          input.style.opacity = useLevels ? "0.5" : "1";
+        });
+
+        // Enable/disable Levels settings
+        levelsSettings.forEach(input => {
+          input.disabled = !useLevels;
+          input.style.opacity = !useLevels ? "0.5" : "1";
+        });
+      }
+
+      // Run when the page loads
+      updateSettingsState();
+
+      // Add listeners
+      levelsRadio.addEventListener("change", updateSettingsState);
+      ticksRadio.addEventListener("change", updateSettingsState);
     });
-
-    // Enable/disable Levels settings
-    levelsSettings.forEach(input => {
-      input.disabled = !useLevels;
-      input.style.opacity = !useLevels ? "0.5" : "1";
-    });
-  }
-
-  // Run when the page loads
-  updateSettingsState();
-
-  // Add listeners
-  levelsRadio.addEventListener("change", updateSettingsState);
-  ticksRadio.addEventListener("change", updateSettingsState);
-});
-</script>
+  </script>
 
 </body>
 </html>

@@ -8,6 +8,13 @@ from zoneinfo import ZoneInfo
 from flask import Flask, request, jsonify, render_template, Response
 from signalrcore.hub_connection_builder import HubConnectionBuilder
 
+from preset_manager import (
+    save_preset,
+    load_preset,
+    delete_preset,
+    list_presets
+)
+
 from topstepx_api import (
     place_order,
     get_account,
@@ -53,6 +60,54 @@ settings = {
     "contractId": "",
     "contractDesc": ""
 }
+
+# ======================================================
+# PRESET PROFILE ROUTES
+# ======================================================
+@app.route("/preset/list", methods=["GET"])
+def preset_list():
+    presets = list_presets()
+    return jsonify({"presets": presets})
+
+@app.route("/preset/save", methods=["POST"])
+def preset_save():
+    data = request.get_json()
+    name = data.get("name")
+    settings_data = data.get("settings")
+
+    if not name or not settings_data:
+        return jsonify({"error": "Missing preset name or settings"}), 400
+
+    try:
+        save_preset(name, settings_data)
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/preset/load", methods=["POST"])
+def preset_load():
+    data = request.get_json()
+    name = data.get("name")
+
+    if not name:
+        return jsonify({"error": "Missing preset name"}), 400
+
+    preset = load_preset(name)
+    if preset is None:
+        return jsonify({"error": "Preset not found"}), 404
+
+    return jsonify({"status": "ok", "settings": preset})
+
+@app.route("/preset/delete", methods=["POST"])
+def preset_delete():
+    data = request.get_json()
+    name = data.get("name")
+
+    if not name:
+        return jsonify({"error": "Missing preset name"}), 400
+
+    delete_preset(name)
+    return jsonify({"status": "ok"})
 
 # ======================================================
 # TRADE STATE MANAGEMENT
@@ -664,7 +719,10 @@ def webhook_ifvg():
             message = raw.lower()
             data = {"message": message}
 
-        log_message(f"[IFVG] Alert received: {message}")
+        if "test" in message:
+            log_message(f"[TEST] Alert received: {message}")
+        else:
+            log_message(f"[IFVG] Alert received: {message}")
 
         # Direction
         if "bullish" in message:
@@ -992,30 +1050,6 @@ def webhook_ifvg():
         return jsonify({"error": str(e)}), 500
 
 # ======================================================
-# TEST ENDPOINTS
-# ======================================================
-
-@app.route("/test_long", methods=["POST"])
-def test_long():
-    log_message("TEST: Placing long market order.")
-    # fake_alert = {"message": "1m-15m MNQZ2025: Potential Bullish Candle"}
-    fake_alert = {"message": "Bullish 30sec IFVG"}
-    with app.test_request_context("/webhook_ifvg", method="POST", json=fake_alert):
-        response = webhook_ifvg()
-        print("Webhook response from /test_long:", response)
-    return jsonify({"status": "ok"})
-
-@app.route("/test_short", methods=["POST"])
-def test_short():
-    log_message("TEST: Placing short market order.")
-    # fake_alert = {"message": "1m-15m MNQZ2025: Potential Bearish Candle"}
-    fake_alert = {"message": "Bearish 30sec IFVG"}
-    with app.test_request_context("/webhook_ifvg", method="POST", json=fake_alert):
-        response = webhook_ifvg()
-        print("Webhook response from /test_short:", response)
-    return jsonify({"status": "ok"})
-
-# ======================================================
 # Threads
 # ======================================================
 def start_thread(name, target):
@@ -1144,7 +1178,7 @@ def macro_time_tracker():
         in_ny = ny_start <= current_minutes < ny_end
 
         if use_macro and in_ny:
-            macro_window = (10 <= minute < 20) or (20 <= minute < 40)
+            macro_window = (minute >= 50) or (minute <= 10) or (20 <= minute <= 40)
         else:
             macro_window = True
 

@@ -1,4 +1,5 @@
 let currentUser = null;
+let presetNames = [];
 
 // Prompt for username
 function submitUsername() {
@@ -42,6 +43,248 @@ function denyAccess(msg) {
     <h2 style="color:red;text-align:center;margin-top:20%">${msg}</h2>
   `;
 }
+
+
+document.addEventListener("DOMContentLoaded", () => {
+  // existing API/account code is already here in your file
+
+  // Preset events
+  loadPresetList();
+
+  document.getElementById("savePresetBtn").addEventListener("click", savePresetHandler);
+  document.getElementById("loadPresetBtn").addEventListener("click", loadPresetHandler);
+  document.getElementById("deletePresetBtn").addEventListener("click", deletePresetHandler);
+
+  const toggle = document.getElementById("presetDropdownToggle");
+  const menu = document.getElementById("presetDropdownMenu");
+  const input = document.getElementById("presetName");
+
+  toggle.addEventListener("click", () => {
+    menu.classList.toggle("open");
+  });
+
+  // Close dropdown when clicking outside
+  document.addEventListener("click", (e) => {
+    if (!menu.contains(e.target) && !toggle.contains(e.target) && !input.contains(e.target)) {
+      menu.classList.remove("open");
+    }
+  });
+
+  // Filter presets while typing
+  input.addEventListener("input", () => {
+    renderPresetDropdown(input.value.trim());
+  });
+});
+
+
+
+// ===== PRESET PROFILE STUFF ======
+function loadPresetList() {
+  fetch("/preset/list")
+    .then(res => res.json())
+    .then(data => {
+      presetNames = data.presets || [];
+      renderPresetDropdown();
+    });
+}
+
+
+function savePresetHandler() {
+  const name = document.getElementById("presetName").value.trim();
+  if (!name) {
+    alert("Give your preset a name first, genius.");
+    return;
+  }
+
+  const settings = gatherAllSettings();
+
+  fetch("/preset/save", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, settings })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.status === "ok") {
+      loadPresetList();
+      alert("Preset saved.");
+    } else {
+      alert("Failed to save preset.");
+    }
+  });
+}
+
+function renderPresetDropdown(filterText = "") {
+  const menu = document.getElementById("presetDropdownMenu");
+  const input = document.getElementById("presetName");
+  menu.innerHTML = "";
+
+  const filtered = presetNames.filter(name =>
+    !filterText || name.toLowerCase().includes(filterText.toLowerCase())
+  );
+
+  if (filtered.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "preset-option";
+    empty.textContent = "(no presets)";
+    empty.style.color = "#777";
+    menu.appendChild(empty);
+    return;
+  }
+
+  filtered.forEach(name => {
+    const item = document.createElement("div");
+    item.className = "preset-option";
+    item.textContent = name;
+    item.addEventListener("click", () => {
+      input.value = name;
+      menu.classList.remove("open");
+    });
+    menu.appendChild(item);
+  });
+}
+
+function loadPresetHandler() {
+  const name = document.getElementById("presetName").value.trim();
+  if (!name) {
+    alert("Enter a preset name to load.");
+    return;
+  }
+
+  fetch("/preset/load", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.error) {
+      alert(data.error);
+      return;
+    }
+
+    applySettingsToForm(data.settings);
+    alert("Preset loaded.");
+  });
+}
+
+function deletePresetHandler() {
+  const name = document.getElementById("presetName").value.trim();
+  if (!name) {
+    alert("Enter a preset name to delete.");
+    return;
+  }
+
+  fetch("/preset/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.status === "ok") {
+      loadPresetList();
+      alert("Preset deleted.");
+    }
+  });
+}
+
+function gatherAllSettings() {
+  const selectedMethod = document.querySelector('input[name="tpslMethod"]:checked');
+  const selectedBE = document.querySelector('input[name="beMethod"]:checked');
+
+  return {
+    propUsername: document.getElementById("propUsername").value.trim(),
+    apiKey: document.getElementById("apiKey").value.trim(),
+    accountInput: document.getElementById("accountInput").value.trim(),
+    symbolInput: document.getElementById("symbolInput").value.trim(),
+
+    contracts: parseInt(document.getElementById('contracts').value),
+    takeProfit: parseInt(document.getElementById('takeProfit').value),
+    stopLoss: parseInt(document.getElementById('stopLoss').value),
+
+    contractsTP1 : parseInt(document.getElementById('contractsTP1').value),
+    contractsTP2 : parseInt(document.getElementById('contractsTP2').value),
+    backupTP1 : parseInt(document.getElementById('backupTP1').value),
+    backupTP2 : parseInt(document.getElementById('backupTP2').value),
+    backupSL : parseInt(document.getElementById('backupSL').value),
+
+    tpslMethod: selectedMethod.value,
+    beMethod: selectedBE.value,
+    useMacro: document.getElementById('useMacro').checked,
+
+    sessions: [
+      {
+        enabled: document.getElementById('session1_enabled').checked,
+        start: document.getElementById('session1_start').value,
+        end: document.getElementById('session1_end').value
+      },
+      {
+        enabled: document.getElementById('session2_enabled').checked,
+        start: document.getElementById('session2_start').value,
+        end: document.getElementById('session2_end').value
+      },
+      {
+        enabled: document.getElementById('session3_enabled').checked,
+        start: document.getElementById('session3_start').value,
+        end: document.getElementById('session3_end').value
+      }
+    ]
+  };
+}
+
+function applySettingsToForm(s) {
+  // Restore API / account data
+  document.getElementById("propUsername").value = s.propUsername ?? "";
+  document.getElementById("apiKey").value = s.apiKey ?? "";
+  document.getElementById("accountInput").value = s.accountInput ?? "";
+  document.getElementById("symbolInput").value = s.symbolInput ?? "";
+
+  document.getElementById('contracts').value = s.contracts ?? 0;
+  document.getElementById('takeProfit').value = s.takeProfit ?? 0;
+  document.getElementById('stopLoss').value = s.stopLoss ?? 0;
+
+  document.getElementById('contractsTP1').value = s.contractsTP1 ?? 0;
+  document.getElementById('contractsTP2').value = s.contractsTP2 ?? 0;
+
+  document.getElementById('backupTP1').value = s.backupTP1 ?? 0;
+  document.getElementById('backupTP2').value = s.backupTP2 ?? 0;
+  document.getElementById('backupSL').value = s.backupSL ?? 0;
+
+  // TPSL mode
+  document.getElementById('useLevels').checked = s.tpslMethod === "levels";
+  document.getElementById('useTicks').checked = s.tpslMethod === "ticks";
+
+  // Breakeven mode
+  document.getElementById('beFirstInt').checked = s.beMethod === "first";
+  document.getElementById('beAtTP1').checked = s.beMethod === "tp1";
+  document.getElementById('beNone').checked = !s.beMethod;
+
+  // Macro toggle
+  document.getElementById('useMacro').checked = s.useMacro ?? false;
+
+  // Sessions
+  if (s.sessions && s.sessions.length >= 3) {
+    const sessions = s.sessions;
+
+    document.getElementById('session1_enabled').checked = sessions[0].enabled;
+    document.getElementById('session1_start').value = sessions[0].start;
+    document.getElementById('session1_end').value = sessions[0].end;
+
+    document.getElementById('session2_enabled').checked = sessions[1].enabled;
+    document.getElementById('session2_start').value = sessions[1].start;
+    document.getElementById('session2_end').value = sessions[1].end;
+
+    document.getElementById('session3_enabled').checked = sessions[2].enabled;
+    document.getElementById('session3_start').value = sessions[2].start;
+    document.getElementById('session3_end').value = sessions[2].end;
+  }
+
+  // Trigger UI logic (enables/disables ticks vs levels)
+  document.getElementById("useLevels").dispatchEvent(new Event("change"));
+  document.getElementById("useTicks").dispatchEvent(new Event("change"));
+}
+
 
 // ===== Account / API Section =====
 document.addEventListener("DOMContentLoaded", () => {
@@ -236,8 +479,23 @@ function saveSettings() {
 }
 
 // ===== Testing =====
-function TestLong() { fetch('/test_long', { method: 'POST' }); }
-function TestShort() { fetch('/test_short', { method: 'POST' }); }
+function runTest() {
+  const direction = document.getElementById("testDirection").value;
+  const timeframe = document.getElementById("testTimeframe").value;
+
+  // Construct fake alert message exactly like a TradingView alert
+  const msg = `${direction} ${timeframe} IFVG TEST`;
+
+  fetch('/webhook_ifvg', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: msg })
+  })
+  .then(res => res.json())
+  .then(data => {
+  });
+}
+
 
 // ===== Logs =====
 function startLogStream() {
