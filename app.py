@@ -61,6 +61,32 @@ settings = {
     "contractDesc": ""
 }
 
+trade_state = {
+    "active": False,             # True while a position is open
+    "direction": None,           # 'bullish' or 'bearish'
+    "entry_price": None,         # Filled entry price
+    "entry_size": 0,             # Size of the entry position
+    "account_id": None,          # Account reference
+    "tp_orders": [],             # [tp1_order_id, tp2_order_id]
+    "sl_order": None,            # stop-loss order id
+    "be_price": None,            # break-even price (future dynamic use)
+    "opened_at": None,           # ISO timestamp of trade open
+    "closed_at": None,           # ISO timestamp of trade close
+    "brackets_set": False        # True once TP/SL orders are placed
+}
+
+AUTHORIZED_USER = "jkpqismuggle"
+running = False
+trade_lock = False
+log_messages = []
+hub_connection = None
+running_breakeven = False
+macro_time_active = False
+in_ny_session = False
+stop_event = threading.Event()
+threads = {}  # store all active background threads
+
+
 # ======================================================
 # PRESET PROFILE ROUTES
 # ======================================================
@@ -109,33 +135,6 @@ def preset_delete():
     delete_preset(name)
     return jsonify({"status": "ok"})
 
-# ======================================================
-# TRADE STATE MANAGEMENT
-# ======================================================
-trade_state = {
-    "active": False,             # True while a position is open
-    "direction": None,           # 'bullish' or 'bearish'
-    "entry_price": None,         # Filled entry price
-    "entry_size": 0,             # Size of the entry position
-    "account_id": None,          # Account reference
-    "tp_orders": [],             # [tp1_order_id, tp2_order_id]
-    "sl_order": None,            # stop-loss order id
-    "be_price": None,            # break-even price (future dynamic use)
-    "opened_at": None,           # ISO timestamp of trade open
-    "closed_at": None,           # ISO timestamp of trade close
-    "brackets_set": False        # True once TP/SL orders are placed
-}
-
-AUTHORIZED_USER = "jkpqismuggle"
-running = False
-trade_lock = False
-log_messages = []
-hub_connection = None
-running_breakeven = False
-macro_time_active = False
-in_ny_session = False
-stop_event = threading.Event()
-threads = {}  # store all active background threads
 # ======================================================
 # LOGGING HELPERS
 # ======================================================
