@@ -497,13 +497,13 @@ main {
 }
 
 .log-stream {
-  background: #020617;
+  background: #f5f5f5;
   border-radius: 0.5rem;
   border: 1px solid #0f172a;
   padding: 0.75rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 0.8rem;
-  color: #e5e7eb;
+  color: #000000;
   min-height: 250px;
   max-height: 250px;
   overflow-y: auto;
