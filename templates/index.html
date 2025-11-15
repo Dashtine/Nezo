@@ -170,6 +170,7 @@
               <button class="tab-button active" data-tab="tp">Trading Params</button>
               <button class="tab-button" data-tab="sessions">Custom Sessions</button>
               <button class="tab-button" data-tab="macro">Macro</button>
+              <button class="tab-button" data-tab="analytics">Analytics</button>
               <button class="tab-button" data-tab="test">Test Order</button>
             </div>
           </div>
@@ -370,6 +371,18 @@
                 For Asian/London, macro times are ignored.*
               </p>
             </div>
+
+            <!-- TAB: Analytics -->
+            <div class="tab-content" id="tab-analytics">
+              <div class="field">
+                <label><strong>*Work in Progress*</strong></label>
+              </div>
+              <p class="hint">
+                IT WILL CONTAIN WIN RATE, PROFIT, ETC.
+              </p>
+            </div>
+
+            <!-- TAB: Test Order -->
             <div class="tab-content" id="tab-test">
               <!-- Test controls -->
               <div class="test-row">
@@ -481,6 +494,7 @@
         tp: document.getElementById("tab-tp"),
         sessions: document.getElementById("tab-sessions"),
         macro: document.getElementById("tab-macro"),
+        analytics: document.getElementById("tab-analytics"),
         test: document.getElementById("tab-test")
       };
 

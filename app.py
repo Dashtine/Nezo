@@ -7,6 +7,9 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from flask import Flask, request, jsonify, render_template, Response
 from signalrcore.hub_connection_builder import HubConnectionBuilder
+from collections import deque
+from threading import Lock
+
 
 from preset_manager import (
     save_preset,
@@ -84,7 +87,8 @@ macro_time_active = False
 in_ny_session = False
 stop_event = threading.Event()
 threads = {}  # store all active background threads
-
+log_lock = Lock()
+log_messages = deque(maxlen=200)
 
 # ======================================================
 # PRESET PROFILE ROUTES
@@ -147,18 +151,24 @@ def log_message(message):
     ts = pst_now.strftime("%m-%d-%y %I:%M:%S %p PST")
     entry = f"[{ts}] {message}"
     print(entry)
-    log_messages.append(entry)
-    if len(log_messages) > 200:
-        log_messages.pop(0)
+
+    with log_lock:
+        log_messages.append(entry)
 
 def generate_logs():
+    idx = 0
     while True:
-        if log_messages:
-            yield f"data: {log_messages.pop(0)}\n\n"
-        else:
-            # keep the stream alive
-            yield f": keepalive\n\n"
-            time.sleep(1)
+        with log_lock:
+            if idx < len(log_messages):
+                entry = log_messages[idx]
+                idx += 1
+                out = f"data: {entry}\n\n"
+            else:
+                out = ": keepalive\n\n"
+
+        yield out
+        time.sleep(0.1)
+
 
 # ======================================================
 # USERHUB CONNECTION
@@ -169,13 +179,13 @@ def start_userhub():
     token = settings.get("token")
     account_id = settings.get("accountId")
     if not token or not account_id:
-        log_message("[UserHub] Cannot start: Missing token or account ID.")
+        log_message("[Bot] Cannot start: Missing token or account ID.")
         return
 
     hub_url = f"https://rtc.topstepx.com/hubs/user?access_token={token}"
 
     try:
-        log_message("[UserHub] Connecting to TopstepX Live Feed")
+        log_message("[Bot] Connecting to TopstepX Live Feed")
 
         connection = (
             HubConnectionBuilder()
@@ -190,22 +200,22 @@ def start_userhub():
         )
 
         def on_open():
-            log_message("[UserHub] Connected.")
+            log_message("[Topstep] Connected.")
             connection.send("SubscribeAccounts", [])
             connection.send("SubscribeOrders", [account_id])
             connection.send("SubscribePositions", [account_id])
             connection.send("SubscribeTrades", [account_id])
-            log_message(f"[UserHub] Subscribed to account {account_id}")
+            print(f"[Topstep] Subscribed to account {account_id}")
 
         def on_close():
-            log_message("[UserHub] Connection closed.")
+            log_message("[Topstep] Connection closed.")
 
         def on_error(err):
-            log_message(f"[UserHub] Error: {err}")
+            log_message(f"[Topstep] Error: {err}")
 
         def on_position_update(args):
             """Handles position updates from TopstepX UserHub (GatewayUserPosition)."""
-            print("ON POSITION UPDATE")
+
             global trade_state
             payload = args[0] if isinstance(args, list) and args else args
             if not isinstance(payload, dict):
@@ -218,7 +228,6 @@ def start_userhub():
             size = pos.get("size", 0)
             avg_price = pos.get("averagePrice")
             ttype = pos.get("type", -1)
-            position_id = pos.get("id")  # This is the position ID
 
             side = "Long" if ttype == 1 else "Short" if ttype == 2 else "Flat"
 
@@ -228,20 +237,18 @@ def start_userhub():
             # === POSITION CLOSED ===
             if action == 2 or size == 0 or ttype == 0:
                 if trade_state.get("active"):
-                    log_message(f"[UserHub] 💎 Position CLOSED @ {avg_price} | Contract={contract_id}")
+                    log_message(f"[Topstep] Position CLOSED @ {avg_price} | Contract={contract_id}")
 
                     if settings["tpslMethod"] == "ticks":
                         return
                     
                     # Cancel any remaining TP/SL orders
                     for oid in (trade_state.get("tp_orders") or []):
-                        print("IN FOR EACH OID")
                         if oid:
                             cancel_order(oid, settings["token"], settings["accountId"])
                     if trade_state.get("sl_order"):
-                        print("IN OTHER OEN")
                         cancel_order(trade_state["sl_order"], settings["token"], settings["accountId"])
-                    log_message("[UserHub] 🧹 All open orders canceled after close.")
+                    log_message("[Topstep] All open orders canceled after close.")
 
                     # Reset trade state
                     trade_state.update({
@@ -257,13 +264,13 @@ def start_userhub():
                         "brackets_set": False
                     })
                 else:
-                    log_message("[UserHub] Position close event received, but no active trade tracked.")
+                    print("[Topstep] Position close event received, but no active trade tracked.")
                 return
 
             # === POSITION OPENED / ADJUSTED ===
             if action == 1:
                 if settings["tpslMethod"] == "ticks":
-                        log_message(f"[UserHub] 🚀 {side} position OPENED @ {avg_price} (size={size})")
+                        log_message(f"[Topstep] {side} position OPENED @ {avg_price} (size={size})")
                         return
                 
                 if not trade_state.get("active"):
@@ -277,7 +284,7 @@ def start_userhub():
                         "opened_at": datetime.now(ZoneInfo("America/Los_Angeles")).isoformat(),
                         "brackets_set": False
                     })
-                    log_message(f"[UserHub] 🚀 {side} position OPENED @ {avg_price} (size={size})")
+                    log_message(f"[Topstep] {side} position OPENED @ {avg_price} (size={size})")
 
                 else:
                     # Existing position adjusted (scaled in or partial reduction)
@@ -285,10 +292,10 @@ def start_userhub():
                     if size != prev_size or avg_price != trade_state.get("entry_price"):
                         trade_state["entry_size"] = size
                         trade_state["entry_price"] = avg_price
-                        log_message(f"[UserHub] 🔄 Position UPDATED | Side={side}, Size={size}, Avg={avg_price}")
+                        log_message(f"[Topstep] Position UPDATED | Side={side}, Size={size}, Avg={avg_price}")
 
             # === LOG RAW EVENT ===
-            log_message(f"[UserHub] Event received → Action={action}, Type={ttype}, Side={side}, Size={size}, Price={avg_price}")
+            log_message(f"[Topstep] Event received → Action={action}, Type={ttype}, Side={side}, Size={size}, Price={avg_price}")
         
         def on_order_update(args):
             """Handles order updates from TopstepX (GatewayUserOrder)."""
@@ -313,7 +320,7 @@ def start_userhub():
             if status != 2 or fill_volume <= 0:
                 return
 
-            log_message(f"[UserHub] 📩 Order filled update received → ID={order_id}, Side={side}, Size={fill_volume}")
+            log_message(f"[Topstep] Order filled update received → ID={order_id}, Side={side}, Size={fill_volume}")
 
             tp_orders = trade_state.get("tp_orders") or []
             sl_order = trade_state.get("sl_order")
@@ -321,9 +328,9 @@ def start_userhub():
             # --- CASE 1: TP1 filled ---
             if len(tp_orders) >= 1 and order_id == tp_orders[0]:
                 if settings["beMethod"] == "tp1":
-                    log_message(f"[UserHub] 🎯 TP1 filled (order {order_id}). Adjusting SL size and moving to breakeven.")
+                    log_message(f"[Topstep] TP1 filled (order {order_id}). Adjusting SL size and moving to breakeven.")
                 else:
-                    log_message(f"[UserHub] 🎯 TP1 filled (order {order_id}). Adjusting SL size.")
+                    log_message(f"[Topstep] TP1 filled (order {order_id}). Adjusting SL size.")
 
                 try:
                     total_size = trade_state.get("entry_size", 0)
@@ -343,9 +350,9 @@ def start_userhub():
                             stop_price=trade_state["entry_price"]
                         )
                         if modify_resp.get("success"):
-                            log_message(f"[UserHub] 🛡️ SL size updated → {remaining_size} contracts and moved to breakeven after TP1 fill.")
+                            log_message(f"[Topstep] SL size updated → {remaining_size} contracts and moved to breakeven after TP1 fill.")
                         else:
-                            log_message(f"[UserHub] ⚠️ Failed to modify SL size or move stoploss to breakeven: {modify_resp}")
+                            log_message(f"[Topstep] Failed to modify SL size or move stoploss to breakeven: {modify_resp}")
                     elif settings["beMethod"] == "":
                         modify_resp = modify_order(
                             account_id=account_id,
@@ -354,15 +361,15 @@ def start_userhub():
                             token=settings["token"],
                         )
                         if modify_resp.get("success"):
-                           log_message(f"[UserHub] 🛡️ SL size updated → {remaining_size} contracts after TP1 fill.")
+                           log_message(f"[Topstep] SL size updated → {remaining_size} contracts after TP1 fill.")
                         else:
-                           log_message(f"[UserHub] ⚠️ Failed to modify SL size: {modify_resp}")
+                           log_message(f"[Topstep] Failed to modify SL size: {modify_resp}")
 
                     trade_state["be_price"] = None
 
 
                 except Exception as e:
-                    log_message(f"[UserHub] ❌ Error modifying SL after TP1 fill: {e}")
+                    log_message(f"[UserHub] Error modifying SL after TP1 fill: {e}")
 
         connection.on_open(on_open)
         connection.on_close(on_close)
@@ -371,12 +378,12 @@ def start_userhub():
         connection.on("GatewayUserOrder", on_order_update)
         
         connection.start()
-        log_message("[UserHub] Connection thread started, waiting for events...")
+        log_message("[Topstep] Connection thread started, waiting for events...")
         while not stop_event.is_set():
             stop_event.wait(5)
 
     except Exception as e:
-        log_message(f"[UserHub] Failed to start: {e}")
+        log_message(f"[Topstep] Failed to start: {e}")
 
 # ======================================================
 # ROUTES
@@ -451,17 +458,16 @@ def save_settings():
 
     settings["sessions"] = parsed_sessions
 
-    log_message("Settings updated.")
+    log_message("[Bot] Settings updated.")
     return jsonify({"status": "ok", "settings": settings})
 
 
 @app.route("/set_api_key", methods=["POST"])
 def set_api_key():
     data = request.get_json()
-    print("data", data)
     api_key = data.get("apiKey")
     prop_username = data.get("username")
-    print('prop_username', prop_username)
+
     if not api_key or not prop_username:
         return jsonify({"error": "API key and prop username required"}), 400
     try:
@@ -474,10 +480,10 @@ def set_api_key():
             "token": token,
             "token_expiry": expiry_time.isoformat()
         })
-        log_message(f"API key authenticated for {prop_username}.")
+        log_message(f"[Bot] API key authenticated for {prop_username}.")
         return jsonify({"status": "ok"})
     except Exception as e:
-        log_message(f"Error generating token: {e}")
+        log_message(f"[Bot] Error generating token: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route("/set_account", methods=["POST"])
@@ -493,14 +499,14 @@ def set_account():
             (a for a in accounts_data.get("accounts", [])
              if a.get("name", "").lower() == account_name.lower()), None)
         if not found:
-            log_message(f"Account not found for {account_name}")
+            log_message(f"[Bot] Account not found for {account_name}")
             return jsonify({"status": "error", "error": "Account not found"}), 404
         settings["account"] = found["name"]
         settings["accountId"] = found["id"]
-        log_message(f"Account set: {found['name']}")
+        log_message(f"[Bot] Account set: {found['name']}")
         return jsonify({"status": "ok"})
     except Exception as e:
-        log_message(f"Error fetching account: {e}")
+        log_message(f"[Bot] Error fetching account: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route("/set_contract", methods=["POST"])
@@ -524,7 +530,7 @@ def set_contract():
             None
         )
         if not found:
-            log_message(f"No contract match found for {symbol} or {alt_symbol}")
+            log_message(f"[Bot] No contract match found for {symbol} or {alt_symbol}")
             return jsonify({
                 "status": "error",
                 "error": f"Contract '{symbol}' not found."
@@ -532,11 +538,11 @@ def set_contract():
         settings["contractName"] = found["name"]
         settings["contractId"] = found["id"]
         settings["contractDesc"] = found.get("description", "")
-        print(settings["contractName"])
-        log_message(f"Contract set: {found['name']} ({found['id']})")
+
+        log_message(f"[Bot] Contract set: {found['name']} ({found['id']})")
         return jsonify({"status": "ok"})
     except Exception as e:
-        log_message(f"Error fetching contract: {e}")
+        log_message(f"[Bot] Error fetching contract: {e}")
         return jsonify({"error": str(e)}), 500
 
 # ======================================================
@@ -551,7 +557,7 @@ def start():
 
     if settings["tpslMethod"] == "ticks" and (settings["contracts"] <= 0 or settings["takeProfit"] <= 0 or settings["stopLoss"] <= 0):
         running = False
-        log_message("Error: You must set your contract size and TP/SL first to use ticks method.")
+        log_message("[Bot] Error: You must set your contract size and TP/SL first to use ticks method.")
         return jsonify({"success": False}), 400
     
     # only start threads if they aren’t already alive
@@ -562,59 +568,8 @@ def start():
     if settings["tpslMethod"] == "levels":
         start_thread("breakeven", breakeven_monitor)
 
-
-
-    log_message("Program started! Connecting to TopstepX live feed...")
-
-    log_message("Program ready — now taking in orders!")
+    log_message(f"[Bot] Program ready — now taking in orders for {settings["contractName"]} | Mode: {settings["tpslMethod"].upper()} | BE Option: {settings["beMethod"].upper()}")
     return jsonify({"success": True})
-
-    log_message("Fetching recent bars for test...")
-
-    # bar = get_3sec_bar(settings["contractId"], settings["token"])
-    # if bar:
-    #     print(f"3-second bar → {bar}")
-
-    # log_message(f"Fetched {len(bars)} bars.")
-    # highs, lows = detect_swings(bars)
-    # bullish_fvgs, bearish_fvgs = detect_fvg(bars)
-    # log_message(f"Detected {len(bullish_fvgs)} bullish and {len(bearish_fvgs)} bearish FVGs.")
-
-    # # === SORT AND PRINT FVGs BY TIME (newest → oldest) ===
-    # print("\n=== Bullish FVGs (Newest → Oldest) ===")
-    # for fvg in sorted(bullish_fvgs, key=lambda x: x["end_time"], reverse=True)[:15]:
-    #     print(f"BULLISH | {fvg['end_time']} | "
-    #         f"Range: {fvg['gap_bottom']} → {fvg['gap_top']}")
-
-    # print("\n=== Bearish FVGs (Newest → Oldest) ===")
-    # for fvg in sorted(bearish_fvgs, key=lambda x: x["end_time"], reverse=True)[:15]:
-    #     print(f"BEARISH | {fvg['end_time']} | "
-    #         f"Range: {fvg['gap_bottom']} → {fvg['gap_top']}")
-
-
-    # # === Sort and Display Recent Swing Points (Newest → Oldest) ===
-    # highs_sorted = sorted(highs, key=lambda x: x["time"], reverse=True)
-    # lows_sorted = sorted(lows, key=lambda x: x["time"], reverse=True)
-
-    # print("\n=== Recent Swing Highs (Newest → Oldest) ===")
-    # for h in highs_sorted[:15]:
-    #     print(f"HIGH | {h['time']} | Price = {h['price']}")
-
-    # print("\n=== Recent Swing Lows (Newest → Oldest) ===")
-    # for l in lows_sorted[:15]:
-    #     print(f"LOW  | {l['time']} | Price = {l['price']}")
-
-    # recent_highs = list(reversed(highs_sorted[-15:]))
-    # recent_lows = list(reversed(lows_sorted[-15:]))
-
-    # entry_price = bars[-1]["c"]
-    # levels = get_levels("bullish", entry_price, recent_highs, recent_lows,
-    #                     bullish_fvgs, bearish_fvgs)
-
-    # log_message(f"Calculated Levels: BE={levels['be']} | TP1={levels['tp1']} "
-    #             f"| TP2={levels['tp2']} | SL={levels['sl']}")
-    # log_message("Test complete (no live trading).")
-    # return jsonify({"success": False}), 400
 
 @app.route("/stop", methods=["POST"])
 def stop():
@@ -622,14 +577,14 @@ def stop():
     running = False
     stop_event.set()  # broadcast shutdown
 
-    log_message("Stopping all threads...")
+    log_message("[System] Stopping all threads...")
 
     try:
         if hub_connection:
             hub_connection.stop()
-            log_message("[UserHub] Disconnected.")
+            log_message("[Topstep] Disconnected.")
     except Exception as e:
-        log_message(f"[UserHub] Error closing connection: {e}")
+        log_message(f"[Topstep] Error closing connection: {e}")
 
     # Wait briefly for threads to exit
     for name, t in list(threads.items()):
@@ -637,7 +592,7 @@ def stop():
             t.join(timeout=2)
             log_message(f"[System] Thread '{name}' stopped.")
 
-    log_message("Bot stopped successfully.")
+    log_message("[Bot] Bot stopped successfully.")
     return jsonify({"success": True})
 
 
@@ -696,20 +651,20 @@ def webhook_ifvg():
     global running,trade_lock, trade_state, in_ny_session
 
     if not running:
-        log_message("Alert ignored; bot not running.")
+        log_message("[Trade] Alert ignored; bot not running.")
         return jsonify({"status": "ignored"})
     
     if trade_lock:
-        log_message("[IFVG] ⚠️ Trade lock active — another order is being processed.")
+        log_message("[Trade] ⚠️ Trade lock active — another order is being processed.")
         return jsonify({"status": "ignored", "reason": "trade lock active"})
     
     if settings.get("hasPosition"):
-            log_message("Order skipped: already in position.")
+            log_message("[Trade] Order skipped: already in position.")
             return jsonify({"status": "ignored", "reason": "position open"})
     
     # Only take trades when macro_time_active is True
     if not macro_time_active:
-        log_message("[IFVG] ⏰ Ignored alert — outside allowed time window.")
+        log_message("[Trade] Ignored alert — outside allowed time window.")
         return jsonify({"status": "ignored"})
 
     
@@ -725,9 +680,9 @@ def webhook_ifvg():
             data = {"message": message}
 
         if "test" in message:
-            log_message(f"[TEST] Alert received: {message}")
+            log_message(f"[Test] Alert received: {message}")
         else:
-            log_message(f"[IFVG] Alert received: {message}")
+            log_message(f"[Trade] Alert received: {message}")
 
         # Direction
         if "bullish" in message:
@@ -737,7 +692,7 @@ def webhook_ifvg():
             direction = "bearish"
             side = 1  # Sell
         else:
-            log_message("[IFVG] ❌ No direction keyword found. Aborting.")
+            log_message("[Trade] No direction keyword found. Aborting.")
             trade_lock = False
             return jsonify({"error": "Missing 'bullish' or 'bearish' keyword"}), 400
 
@@ -758,8 +713,10 @@ def webhook_ifvg():
 
             trade_lock = False
             if order_resp.get("success"):
+                log_message(f"[Trade] {direction.upper()} market order placed successfully.")
                 return jsonify({"status": "ok", "order": order_resp})
-            log_message("Failed to create order.")
+            
+            log_message("[Trade] Failed to create order.")
             return jsonify({"status": "error", "order": order_resp})
 
         # Timeframe detection
@@ -769,7 +726,7 @@ def webhook_ifvg():
         ]
 
         if not timeframe_tokens:
-            log_message("[IFVG] ❌ No valid timeframe found. Aborting.")
+            log_message("[Trade] No valid timeframe found. Aborting.")
             trade_lock = False
             return jsonify({"error": "Missing timeframe (e.g. '3min', '5m', '30sec')"}), 400
 
@@ -782,12 +739,12 @@ def webhook_ifvg():
 
 
         except ValueError:
-            log_message("[IFVG] ❌ Invalid timeframe format. Aborting.")
+            log_message("[Trade] Invalid timeframe format. Aborting.")
             trade_lock = False
             return jsonify({"error": "Invalid timeframe format"}), 400
 
         
-        log_message(f"[IFVG] Using timeframe: {unit_number} {'seconds' if is_seconds else 'minutes'}")
+        log_message(f"[Trade] Using timeframe: {unit_number} {'seconds' if is_seconds else 'minute'}")
 
         tp1_contracts = settings["contracts_tp1"]
         tp2_contracts = settings["contracts_tp2"]
@@ -795,7 +752,6 @@ def webhook_ifvg():
         settings["contracts"] = total_contracts
 
         # === 1. MARKET ENTRY ===
-        log_message(f"[IFVG] Placing {direction.upper()} MARKET order...")
         order_resp = place_order(
             settings["accountId"],
             settings["contractId"],
@@ -808,16 +764,16 @@ def webhook_ifvg():
         )
         
         if not order_resp.get("success"):
-            log_message(f"[IFVG] ❌ Market order failed: {order_resp}")
+            log_message(f"[Trade] {direction.upper()} market order failed: {order_resp}")
             trade_lock = False
             return jsonify({"error": "Market order failed"}), 500
 
-        log_message(f"[IFVG] ✅ Market order placed successfully.")
+        log_message(f"[Trade] {direction.upper()} market order placed successfully.")
 
         # === 1.5 FETCH REAL ENTRY PRICE ===
         pos_data = get_latest_position(settings["accountId"], settings["token"])
         if not pos_data:
-            log_message("[IFVG] ⚠️ Position not found after order placement; using fallback candle close.")
+            log_message("[Trade] Position not found after order placement; using fallback candle close.")
             entry_bar = retrieve_bars(settings["contractId"], settings["token"], unit=unit_type, unit_number=unit_number, limit=1)[-1]
             entry_price = entry_bar["c"]
         else:
@@ -826,7 +782,7 @@ def webhook_ifvg():
             entry_low = entry_bar["l"]
             entry_high = entry_bar["h"]
 
-            log_message(f"[IFVG] 🎯 Entry price set from position data: {entry_price}")
+            log_message(f"[Trade] Entry price set from position data: {entry_price}")
 
         # === 2. RETRIEVE LEVELS ===
         if unit_type == 2:
@@ -835,7 +791,7 @@ def webhook_ifvg():
             bars = retrieve_bars(settings["contractId"], settings["token"], unit=unit_type, unit_number=unit_number, limit=5000)
 
         if not bars:
-            log_message("[IFVG] ❌ No bars retrieved. Aborting.")
+            log_message("[Trade] ❌ No bars retrieved. Aborting.")
             trade_lock = False
             return jsonify({"error": "Failed to retrieve bars"}), 500
 
@@ -905,7 +861,7 @@ def webhook_ifvg():
                 else:
                     tp1_price, tp2_price = None, None
 
-                log_message(f"Backup TPs applied for {backup_tp1} & {backup_tp2} ticks")
+                log_message(f"[Trade] Backup TPs applied for {backup_tp1} & {backup_tp2} ticks")
 
 
             if not sl_price:
@@ -927,22 +883,22 @@ def webhook_ifvg():
                 else:
                     sl_price = None  # unrecognized direction
 
-                log_message(f"Backup SL applied for {backup_sl}")
+                log_message(f"[Trade] Backup SL applied for {backup_sl}")
 
         if not sl_price or not tp1_price or not tp2_price:
-            log_message("[IFVG] ❌ Missing one or more TP/SL levels.")
+            log_message("[Trade] Missing one or more TP/SL levels.")
             trade_lock = False
             return jsonify({"error": "Invalid SL/TP values"}), 400
 
         if settings["beMethod"] == "first":
-            log_message(f"[IFVG] Levels → SL={sl_price} | BE={be_price} | {tp1_price} | TP2={tp2_price}")
+            log_message(f"[Trade] Levels → SL={sl_price} | BE={be_price} | {tp1_price} | TP2={tp2_price}")
         elif settings["beMethod"] == "tp1":
-            log_message(f"[IFVG] Levels → SL={sl_price} | BE/TP1: {tp1_price} | TP2={tp2_price}")
+            log_message(f"[Trade] Levels → SL={sl_price} | BE/TP1: {tp1_price} | TP2={tp2_price}")
         else:
-            log_message(f"[IFVG] Levels → SL={sl_price} | BE=None | {tp1_price} | TP2={tp2_price}")
+            log_message(f"[Trade] Levels → SL={sl_price} | BE=None | {tp1_price} | TP2={tp2_price}")
             
         # === 3. PLACE LIMIT ORDERS ===
-        log_message("[IFVG] Placing TP1, TP2, and SL orders...")
+        log_message("[Trade] Placing TP1, TP2, and SL orders...")
 
         if settings["beMethod"] == "first":
             trade_state['be_price'] = be_price
@@ -1034,9 +990,7 @@ def webhook_ifvg():
         trade_state["brackets_set"] = True
 
         # --- Log and return results ---
-        # log_message(f"[IFVG] TP1 order response: {tp1_resp}")
-        # log_message(f"[IFVG] TP2 order response: {tp2_resp}")
-        # log_message(f"[IFVG] SL order response: {sl_resp}")
+        log_message(f"[Trade] TP1 order response: {tp1_resp} | TP2 order response: {tp2_resp} | SL order response: {sl_resp}")
 
         trade_lock = False
 
@@ -1051,7 +1005,7 @@ def webhook_ifvg():
         })
     
     except Exception as e:
-        log_message(f"[IFVG] Error: {e}")
+        log_message(f"[Trade] Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 # ======================================================
@@ -1081,11 +1035,11 @@ def heartbeat_monitor():
                 failure_count = 0  # success — stay quiet
             else:
                 failure_count += 1
-                log_message(f"[Heartbeat] ⚠️ Unexpected ping response ({text or resp.status_code}) [{failure_count}x]")
+                log_message(f"[Heartbeat] Unexpected ping response ({text or resp.status_code}) [{failure_count}x]")
 
         except Exception as e:
             failure_count += 1
-            log_message(f"[Heartbeat] ❌ Ping error: {e} [{failure_count}x]")
+            log_message(f"[Heartbeat] Ping error: {e} [{failure_count}x]")
 
         stop_event.wait(5)  # replaces time.sleep, allows instant stop
     log_message("[Heartbeat] exited.")
@@ -1104,7 +1058,7 @@ def breakeven_monitor():
         
         sl_order = trade_state.get("sl_order")
         if not sl_order:
-            print("[BE] ⚠️ SL order not yet available, skipping this cycle.")
+            print("[BE] SL order not yet available, skipping this cycle.")
             time.sleep(3)
             continue
 
@@ -1118,7 +1072,7 @@ def breakeven_monitor():
 
         # --- LONG ---
         if trade_state["direction"] == "long" and high >= be_price:
-            log_message(f"[BE] ✅ Breakeven hit @ {bar['high']}. Moving SL to BE.")
+            log_message(f"[BE] Breakeven hit @ {bar['high']}. Moving SL to BE.")
             modify_order(
                 settings["accountId"],
                 sl_order,
@@ -1130,7 +1084,7 @@ def breakeven_monitor():
 
         # --- SHORT ---
         elif trade_state["direction"] == "short" and low <= be_price:
-            log_message(f"[BE] ✅ Breakeven hit @ {bar['low']}. Moving SL to BE.")
+            log_message(f"[BE] Breakeven hit @ {bar['low']}. Moving SL to BE.")
             modify_order(
                 settings["accountId"],
                 sl_order,
