@@ -457,6 +457,78 @@ main {
   color: var(--navy-soft);
 }
 
+/* Analytics */
+/* Matches your existing input styling */
+#tab-analytics .input-field {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 14px;
+}
+
+/* Clean result card */
+#tab-analytics .results-card {
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    background-color: #f8fafc;
+}
+
+/* Button matches your theme */
+#tab-analytics .primary-btn {
+    padding: 12px;
+    border-radius: 10px;
+    border: none;
+    background-color: #1e293b;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* Force the row to space the date inputs properly */
+.analytics-row {
+    display: flex;
+    gap: 20px;
+}
+
+/* Force the date inputs to NOT stretch */
+.analytics-row .form-group {
+    flex: 0 0 250px; /* fixed width, no flex-grow */
+}
+
+/* Let the inputs obey the parent size */
+.analytics-dt {
+    width: 93% !important;
+    min-width: 0; /* prevents stupid overflow */
+}
+
+/* checkbox container layout */
+.tf-checkboxes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+    margin-top: 8px;
+    margin-right: 1px;
+}
+
+/* label styling for each checkbox */
+.tf-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+/* checkbox styling to match your input theme, but subtle */
+.tf-check {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+
 /* Center Start/Stop control */
 .center-control {
   display: flex;
@@ -656,8 +728,18 @@ body.dark-mode .preset-option {
 }
 
 body.dark-mode .preset-option:hover {
+  background: #37465c !important;
+}
+
+body.dark-mode .results-card {
   background: #334155 !important;
 }
+
+body.dark-mode .primary-btn {
+  background: #254064 !important;
+}
+
+
 body.dark-mode .log-stream {
   background: #0a0f1f;
   border-color: #334155;
