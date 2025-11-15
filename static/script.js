@@ -1,5 +1,4 @@
 let currentUser = null;
-let presetNames = [];
 
 // Prompt for username
 function submitUsername() {
@@ -44,7 +43,76 @@ function denyAccess(msg) {
   `;
 }
 
+async function applyAccount() {
+  const username = document.getElementById("propUsername").value.trim();
+  const apiKey = document.getElementById("apiKey").value.trim();
+  const accountId = document.getElementById("accountInput").value.trim();
+  const symbol = document.getElementById("symbolInput").value.trim();
+  const tokenStatus = document.getElementById("tokenStatus");
 
+  // Simple validation
+  if (!username || !apiKey) {
+    tokenStatus.textContent = "Username or API key is missing.";
+    tokenStatus.style.color = "red";
+    return;
+  }
+  if (!accountId) {
+    tokenStatus.textContent = "Account ID is missing.";
+    tokenStatus.style.color = "red";
+    return;
+  }
+  if (!symbol) {
+    tokenStatus.textContent = "Symbol is missing.";
+    tokenStatus.style.color = "red";
+    return;
+  }
+
+  tokenStatus.textContent = "Validating...";
+  tokenStatus.style.color = "#444";
+
+  try {
+    // 1. Validate username + API key
+    const userRes = await fetch("/set_api_key", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ username, apiKey })
+    });
+    const userData = await userRes.json();
+    console.log("userData" + userData.status)
+    if (userData.status !== "ok") throw new Error(userData.message || "Username/API validation failed.");
+
+    // 2. Validate account ID
+    const accountRes = await fetch("/set_account", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ accountId })
+    });
+    const accountData = await accountRes.json();
+    if (accountData.status !== "ok") throw new Error(accountData.message || "Account validation failed.");
+
+    // 3. Validate symbol
+    const symbolRes = await fetch("/set_contract", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ symbol })
+    });
+    const symbolData = await symbolRes.json();
+    if (symbolData.status !== "ok") throw new Error(symbolData.message || "Symbol validation failed.");
+
+    // If all steps succeed:
+
+    tokenStatus.textContent = "Connected!";
+    tokenStatus.style.color = "#166534"; // green
+
+
+  } catch (err) {
+    tokenStatus.textContent = err.message;
+    tokenStatus.style.color = "red";
+  }
+}
+
+
+// ===== PRESET PROFILE STUFF ======
 document.addEventListener("DOMContentLoaded", () => {
   // existing API/account code is already here in your file
 
@@ -74,11 +142,28 @@ document.addEventListener("DOMContentLoaded", () => {
   input.addEventListener("input", () => {
     renderPresetDropdown(input.value.trim());
   });
+
+  // Dark Mode Event Listener
+  const dark_toggle = document.getElementById("darkModeToggle");
+
+  // Load saved preference
+  if (localStorage.getItem("darkMode") === "enabled") {
+    document.body.classList.add("dark-mode");
+    dark_toggle.checked = true;
+  }
+
+  dark_toggle.addEventListener("change", () => {
+    if (dark_toggle.checked) {
+      document.body.classList.add("dark-mode");
+      localStorage.setItem("darkMode", "enabled");
+    } else {
+      document.body.classList.remove("dark-mode");
+      localStorage.setItem("darkMode", "disabled");
+    }
+  });
 });
 
 
-
-// ===== PRESET PROFILE STUFF ======
 function loadPresetList() {
   fetch("/preset/list")
     .then(res => res.json())
@@ -92,7 +177,7 @@ function loadPresetList() {
 function savePresetHandler() {
   const name = document.getElementById("presetName").value.trim();
   if (!name) {
-    alert("Give your preset a name first, genius.");
+    alert("Give your preset a name first.");
     return;
   }
 
@@ -107,7 +192,6 @@ function savePresetHandler() {
   .then(data => {
     if (data.status === "ok") {
       loadPresetList();
-      alert("Preset saved.");
     } else {
       alert("Failed to save preset.");
     }
@@ -164,7 +248,6 @@ function loadPresetHandler() {
     }
 
     applySettingsToForm(data.settings);
-    alert("Preset loaded.");
   });
 }
 
@@ -184,7 +267,6 @@ function deletePresetHandler() {
   .then(data => {
     if (data.status === "ok") {
       loadPresetList();
-      alert("Preset deleted.");
     }
   });
 }
@@ -286,151 +368,53 @@ function applySettingsToForm(s) {
 }
 
 
-// ===== Account / API Section =====
-document.addEventListener("DOMContentLoaded", () => {
-  const apiKeyInput = document.getElementById("apiKey");
-  const propUserInput = document.getElementById("propUsername");
-
-  // Validate API Key
-  document.getElementById("validateAndSave").addEventListener("click", async () => {
-    const apiKey = apiKeyInput.value.trim();
-    const propUsername = propUserInput.value.trim();
-
-    if (!apiKey || !propUsername) {
-      alert("Please enter both prop username and API key.");
-      return;
-    }
-
-    const resp = await fetch("/set_api_key", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ apiKey, propUsername })
-    });
-
-    const data = await resp.json();
-    const statusEl = document.getElementById("tokenStatus");
-
-    if (resp.ok) {
-      statusEl.innerHTML = `✅ Session is good for 24 hours.`;
-    } else {
-      statusEl.innerHTML = `<span style="color:red;">❌ ${data.error || "Failed to validate API key"}</span>`;
-    }
-  });
-
-  // Set account
-  document.getElementById("setAccountBtn").addEventListener("click", async () => {
-    const account = document.getElementById("accountInput").value.trim();
-    if (!account) {
-      alert("Please enter an account name first.");
-      return;
-    }
-
-    const resp = await fetch("/set_account", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ account })
-    });
-
-    const data = await resp.json();
-    if (resp.ok && data.status === "ok") {
-      alert(`✅ Account set successfully: ${data.account} (${data.accountId})`);
-    } else {
-      alert(`❌ ${data.error || "Account not found."}`);
-    }
-  });
-
-  // Set contract
-  document.getElementById("setSymbolBtn").addEventListener("click", async () => {
-    const symbol = document.getElementById("symbolInput").value.trim();
-    if (!symbol) {
-      alert("Please enter a contract name first.");
-      return;
-    }
-
-    const resp = await fetch("/set_contract", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ symbol })
-    });
-
-    const data = await resp.json();
-    if (resp.ok && data.status === "ok") {
-      alert(`✅ Contract set successfully: ${data.contractName} (${data.contractId})\n${data.description || ""}`);
-    } else {
-      alert(`❌ ${data.error || "Contract not found."}`);
-    }
-  });
-});
-
 // ===== Bot Controls =====
 function toggleBot() {
   const button = document.getElementById('toggleButton');
-  const isStarted = button.classList.contains('start');
+  const isStarting = button.classList.contains('start');
 
-  const contracts = document.getElementById('contracts');
-  const takeProfit = document.getElementById('takeProfit');
-  const stopLoss = document.getElementById('stopLoss');
-  const saveBtn = document.querySelector('.save');
-
-  // existing input groups
-  const useLevels = document.getElementById('useLevels');
-  const useTicks = document.getElementById('useTicks');
-  const contractsTP1 = document.getElementById('contractsTP1');
-  const contractsTP2 = document.getElementById('contractsTP2');
-  const beFirstInt = document.getElementById('beFirstInt');
-  const beAtTP1 = document.getElementById('beAtTP1');
-  const beNone = document.getElementById('beNone');
-  const backupTP1 = document.getElementById('backupTP1');
-  const backupTP2 = document.getElementById('backupTP2');
-  const backupSL = document.getElementById('backupSL');
-  const useMacro = document.getElementById('useMacro');
-
-  // new session inputs
-  const sessionFields = [
-    "session1_enabled", "session1_start", "session1_end",
-    "session2_enabled", "session2_start", "session2_end",
-    "session3_enabled", "session3_start", "session3_end"
+  // Inputs for disabling/enabling
+  const inputsToToggle = [
+    'contracts','takeProfit','stopLoss',
+    'useLevels','useTicks',
+    'contractsTP1','contractsTP2',
+    'beFirstInt','beAtTP1','beNone',
+    'backupTP1','backupTP2','backupSL',
+    'useMacro',
+    'session1_enabled','session1_start','session1_end',
+    'session2_enabled','session2_start','session2_end',
+    'session3_enabled','session3_start','session3_end'
   ].map(id => document.getElementById(id));
 
-  if (isStarted) {
+  if (isStarting) {
+
+    // 🔥 AUTO-SAVE all settings before starting
+    saveSettings();
+
     // ---- Start bot ----
     button.classList.remove('start');
     button.classList.add('stop');
     button.textContent = 'Stop';
 
-    // disable inputs
-    [
-      contracts, takeProfit, stopLoss, saveBtn,
-      useLevels, useTicks,
-      contractsTP1, contractsTP2,
-      beFirstInt, beAtTP1, beNone,
-      backupTP1, backupTP2, backupSL,
-      useMacro,
-      ...sessionFields
-    ].forEach(el => el.disabled = true);
+    // Disable all inputs while bot is running
+    inputsToToggle.forEach(el => el.disabled = true);
 
     fetch('/start', { method: 'POST' });
 
   } else {
+
     // ---- Stop bot ----
     button.classList.remove('stop');
     button.classList.add('start');
     button.textContent = 'Start';
 
-    // re-enable inputs
-    [
-      contracts, takeProfit, stopLoss, saveBtn,
-      useLevels, useTicks,
-      contractsTP1, contractsTP2,
-      beFirstInt, beAtTP1, beNone,
-      backupTP1, backupTP2, backupSL,
-      useMacro,
-      ...sessionFields
-    ].forEach(el => el.disabled = false);
+    // Re-enable everything
+    inputsToToggle.forEach(el => el.disabled = false);
 
     fetch('/stop', { method: 'POST' });
   }
 }
+// ===== END OF PRESET PROFILE STUFF ======
 
 // ===== Settings =====
 function saveSettings() {
