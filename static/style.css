@@ -598,8 +598,14 @@ body.dark-mode .card {
   box-shadow: 0 10px 20px rgba(0,0,0,0.45);
 }
 
+body.dark-mode .tabs {
+  color: white !important;
+  border-color: #dddddd;
+  background: #0e152b !important;
+}
+
 body.dark-mode .tab-button {
-  color: #152231 !important;
+  color: #ffffff !important;
 }
 
 body.dark-mode .tab-button.active {
