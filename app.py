@@ -19,7 +19,6 @@ from topstepx_api import (
     place_order,
     get_account,
     get_contract,
-    has_open_position,
     generate_token,
     cancel_order,
     modify_order,
@@ -75,7 +74,7 @@ trade_state = {
     "brackets_set": False        # True once TP/SL orders are placed
 }
 
-AUTHORIZED_USER = "pinkstaroo"
+AUTHORIZED_USER = "jkpqismuggle"
 running = False
 trade_lock = False
 log_messages = []
@@ -106,6 +105,7 @@ def preset_save():
 
     try:
         save_preset(name, settings_data)
+        log_message(f"[Preset] Profile {name} saved successfully.")
         return jsonify({"status": "ok"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -121,6 +121,8 @@ def preset_load():
     preset = load_preset(name)
     if preset is None:
         return jsonify({"error": "Preset not found"}), 404
+    
+    log_message(f"[Preset] Profile {name} loaded successfully.")
 
     return jsonify({"status": "ok", "settings": preset})
 
@@ -133,6 +135,7 @@ def preset_delete():
         return jsonify({"error": "Missing preset name"}), 400
 
     delete_preset(name)
+    log_message(f"[Preset] Profile {name} deleted.")
     return jsonify({"status": "ok"})
 
 # ======================================================
@@ -455,8 +458,10 @@ def save_settings():
 @app.route("/set_api_key", methods=["POST"])
 def set_api_key():
     data = request.get_json()
+    print("data", data)
     api_key = data.get("apiKey")
-    prop_username = data.get("propUsername")
+    prop_username = data.get("username")
+    print('prop_username', prop_username)
     if not api_key or not prop_username:
         return jsonify({"error": "API key and prop username required"}), 400
     try:
@@ -470,7 +475,7 @@ def set_api_key():
             "token_expiry": expiry_time.isoformat()
         })
         log_message(f"API key authenticated for {prop_username}.")
-        return jsonify({"status": "ok", "expiry": expiry_time.isoformat()})
+        return jsonify({"status": "ok"})
     except Exception as e:
         log_message(f"Error generating token: {e}")
         return jsonify({"error": str(e)}), 500
@@ -478,7 +483,7 @@ def set_api_key():
 @app.route("/set_account", methods=["POST"])
 def set_account():
     data = request.get_json()
-    account_name = data.get("account")
+    account_name = data.get("accountId")
     token = settings.get("token")
     if not token:
         return jsonify({"error": "No valid token. Please authenticate first."}), 400
@@ -488,11 +493,12 @@ def set_account():
             (a for a in accounts_data.get("accounts", [])
              if a.get("name", "").lower() == account_name.lower()), None)
         if not found:
+            log_message(f"Account not found for {account_name}")
             return jsonify({"status": "error", "error": "Account not found"}), 404
         settings["account"] = found["name"]
         settings["accountId"] = found["id"]
-        log_message(f"Account set: {found['name']} ({found['id']})")
-        return jsonify({"status": "ok", "account": found})
+        log_message(f"Account set: {found['name']}")
+        return jsonify({"status": "ok"})
     except Exception as e:
         log_message(f"Error fetching account: {e}")
         return jsonify({"error": str(e)}), 500
@@ -528,7 +534,7 @@ def set_contract():
         settings["contractDesc"] = found.get("description", "")
         print(settings["contractName"])
         log_message(f"Contract set: {found['name']} ({found['id']})")
-        return jsonify({"status": "ok", "contract": found})
+        return jsonify({"status": "ok"})
     except Exception as e:
         log_message(f"Error fetching contract: {e}")
         return jsonify({"error": str(e)}), 500

@@ -11,358 +11,492 @@
   <!-- Login Overlay -->
   <!-- ========================== -->
   <div id="loginOverlay">
-    <div style="text-align:center; margin-top:20%;">
+    <div class="login-modal">
       <h2>Enter Username</h2>
       <input type="text" id="usernameInput" placeholder="Username">
-      <button onclick="submitUsername()">Login</button>
-    </div>
-  </div>
-  <!-- ========================== -->
-  <!-- Account Settings Section -->
-  <!-- ========================== -->
-  <div class="form-container" id="accountSettings">
-    <h2 style="margin-bottom:10px;"></h2>
-  <!-- Preset Profile -->
-    <div class="form-group">
-      <label for="presetName">Preset Profile:</label>
-
-      <div class="input-wrapper preset-wrapper">
-        <div class="preset-input-wrapper">
-          <input 
-            type="text" 
-            id="presetName" 
-            name="presetName"
-            placeholder="Enter or select a preset name"
-          >
-          <button type="button" id="presetDropdownToggle" class="preset-toggle">▾</button>
-          <div id="presetDropdownMenu" class="preset-dropdown"></div>
-        </div>
-
-        <button type="button" id="loadPresetBtn" class="save">Load</button>
-        <button type="button" id="savePresetBtn" class="save">Save</button>
-        <button type="button" id="deletePresetBtn" class="trash-btn">🗑️</button>
-      </div>
-    </div>
-
-    <!-- Propfirm Username -->
-    <div class="form-group">
-      <label for="propUsername">Prop Firm Username:</label>
-      <div class="input-wrapper">
-        <input 
-          type="text" 
-          id="propUsername" 
-          name="propUsername" 
-          placeholder="Enter your prop firm username"
-        >
-      </div>
-    </div>
-
-    <!-- API Key -->
-    <div class="form-group">
-      <label for="apiKey">API Key:</label>
-      <div class="input-wrapper">
-        <input 
-          type="password" 
-          id="apiKey" 
-          name="apiKey" 
-          placeholder="Enter your API key"
-        >
-        <button 
-          type="button" 
-          id="validateAndSave" 
-          class="save"
-          style="margin-left:10px; padding:8px 15px;"
-        >
-          Set
-        </button>
-      </div>
-    </div>
-
-    <!-- Account Selection -->
-    <div class="form-group">
-      <label for="accountInput">Account:</label>
-      <div class="input-wrapper">
-        <input 
-          type="text" 
-          id="accountInput" 
-          name="accountInput" 
-          placeholder="e.g. 50KTC-V2-171261-99323003"
-        >
-        <button 
-          type="button" 
-          id="setAccountBtn" 
-          class="save"
-          style="margin-left:10px; padding:8px 15px;"
-        >
-          Set
-        </button>
-      </div>
-    </div>
-
-    <!-- Contract / Symbol -->
-    <div class="form-group">
-      <label for="symbolInput">Symbol:</label>
-      <div class="input-wrapper">
-        <input 
-          type="text" 
-          id="symbolInput" 
-          name="symbolInput" 
-          placeholder="e.g. MNQZ25"
-        >
-        <button 
-          type="button" 
-          id="setSymbolBtn" 
-          class="save"
-          style="margin-left:10px; padding:8px 15px;"
-        >
-          Set
-        </button>
-      </div>
-    </div>
-
-    <p id="tokenStatus" style="text-align:center; margin-top:10px; color:#333; font-size:14px;"></p>
-  </div>
-
-  <!-- ========================== -->
-  <!-- Bot Controls -->
-  <!-- ========================== -->
-  <button id="toggleButton" class="start" onclick="toggleBot()">Start</button>
-  <div id="logs"></div>
-
-  <!-- ========================== -->
-  <!-- Bot Settings -->
-  <!-- ========================== -->
-  <div class="form-container">
-    <form id="settingsForm">
-      <div class="form-group">
-        <label for="tpslMethod"><b><u>Mode:</u></b></label>
-        <label for="tpslMethod" style="margin-left: 2.8in;">Levels</label>
-        <div class="input-wrapper">
-          <input type="radio" style="margin-top:15px;" id="useLevels" name="tpslMethod"  value="levels" checked>
-        </div>
-        <label for="tpslMethod" style="margin-left: 60px;">Ticks</label>
-        <div class="input-wrapper">
-           <input type="radio" style="margin-top:15px;" id="useTicks" name="tpslMethod" value="ticks">
-        </div>
-        <button type="button" style="margin-left: 2.4in;" class="save" onclick="saveSettings()">Save</button>
-      </div>
-    </form>
-  </div>
-
-  <!-- SETTINGS FOR 'TICKS' MODE -->
-  <div class="form-container">
-    <form id="settingsForm">
-      <div class="form-group">
-        <label for="contracts">Contracts:</label>
-        <div class="input-wrapper">
-          <input type="number" id="contracts" name="contracts" placeholder="0" value=0>
-        </div>
-
-        <label for="takeProfit">Take Profit:</label>
-        <div class="input-wrapper">
-          <input type="number" id="takeProfit" name="takeProfit" placeholder="0" value=0>
-        </div>
-
-        <label for="stopLoss">Stop Loss:</label>
-        <div class="input-wrapper">
-          <input type="number" id="stopLoss" name="stopLoss" placeholder="0" value=0>
-        </div>
-      </div>
-    </form>
-  </div>
-
-  <!-- SETTINGS FOR 'LEVELS' MODE -->
-  <div class="form-container">
-    <div class="form-group">
-    <!-- TP Contract Sizes -->
-      <label for="tp1Contracts" style="margin-top:15px;">TP1 Contracts:</label>
-      <div class="input-wrapper">
-        <input type="number" id="contractsTP1" name="contractsTP1" placeholder="0" value=0>
-      </div>
-
-      <label for="tp2Contracts" style="margin-top:15px;">TP2 Contracts:</label>
-      <div class="input-wrapper">
-        <input type="number" id="contractsTP2" name="contractsTP2" placeholder="0" value=0>
-      </div>
+      <button class="btn btn-primary" onclick="submitUsername()">Login</button>
     </div>
   </div>
 
-  <div class="form-container">
-    <div class="form-group">
-    <!-- Breakeven Flags -->
-     <label style="min-width: 140px;">Breakeven Options:</label>
-     <label>First Level</label>
-      <div class="input-wrapper">
-        <input type="radio" style="max-width: 15px; margin-top:8px;" id="beFirstInt" name="beMethod" value="first">
-      </div>  
-
-      <label>TP 1</label>
-      <div class="input-wrapper">
-        <input type="radio" style="max-width: 15px; margin-top:8px;" id="beAtTP1" name="beMethod" value="tp1">
-      </div>   
-
-      <label>None</label>
-      <div class="input-wrapper">
-        <input type="radio" style="max-width: 15px; margin-top:8px;" id="beNone" name="beMethod" value="" checked>
-      </div>   
-      
-    </div>  
-  </div>
-
   <!-- ========================== -->
-  <!-- Backup Levels (for Levels mode) -->
+  <!-- Header -->
   <!-- ========================== -->
-  <div style="height:10px;"></div> 
-  <div class="form-container">
-      <label class="form-group">
-        Backup Levels (use ticks if no levels are found):
-      </label>
-  </div>
-  <div style="height:10px;"></div> 
-  <div class="form-container" id="backupLevelsSection">
-    <div class="form-group">
-      <div style="height:10px;"></div> 
-      <label for="backupTP1" style="min-width:95px;">Backup TP1</label>
-      <div class="input-wrapper">
-        <input type="number" style="width:80px;" id="backupTP1" name="backupTP1" placeholder="0" value="0">
-      </div>
-
-      <label for="backupTP2" style="min-width:100px;">Backup TP2:</label>
-      <div class="input-wrapper">
-        <input type="number" style="width:80px;" id="backupTP2" name="backupTP2" placeholder="0" value="0">
-      </div>
-
-      <label for="backupSL" style="min-width:95px;">Backup SL:</label>
-      <div class="input-wrapper">
-        <input type="number" style="width:80px;" id="backupSL" name="backupSL" placeholder="0" value="0">
-      </div>
+  <header class="top-header">
+    <div class="top-header-inner">
+    <!-- DARK MODE TOGGLE SLIDER -->
+    <label class="theme-toggle">
+      <input type="checkbox" id="darkModeToggle">
+      <span class="slider"></span>
+    </label>
     </div>
-    <p style="font-size:12px; color:#555; margin-top:8px; margin-left:5px; font-style:italic;">
-      *If either TP1 or TP2 is missing, it will use the backup TP1/TP2 values instead for both. If only SL is missing, it will only adjust SL.*
-    </p>
-  </div>
+  </header>
 
   <!-- ========================== -->
-  <!-- Additional Settings -->
+  <!-- Main Layout -->
   <!-- ========================== -->
-  <div class="form-container">
-    <form id="settingsForm">
-      <div class="form-group" style="display:inline; align-items:center;">
-        <label for="tpslMethod" style="display:inline; font-weight:bold;"><u>Additional Settings</u></label>
-        <div style="height:10px;"></div> 
-        <div style="display:flex; align-items:center; gap:10px;">
-          <label for="useMacro" style="margin:0;">Macro Times Only</label>
-          <input type="checkbox" id="useMacro" name="useMacro">
-          <p style="font-size:12px; color:#555; margin-top:8px; margin-left:5px; font-style:italic;">
-          *Only works for NY session with first macro at 06:20 and last one at 12:50. For Asian/London, macro times are ignored.*
-          </p>
+  <main>
+    <section class="layout">
+      <!-- LEFT: Account & Presets -->
+      <aside class="sidebar">
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Account & Presets</h2>
+            <p class="card-subtitle">Manage presets and connection details</p>
+          </div>
+          <div class="card-body">
+
+            <!-- Preset Profile -->
+            <div class="field">
+              <label for="presetName">Preset Profile</label>
+              <div class="preset-row">
+                <div class="preset-input-wrapper">
+                  <input
+                    type="text"
+                    id="presetName"
+                    name="presetName"
+                    placeholder="Enter or select a preset name"
+                  >
+                  <button
+                    type="button"
+                    id="presetDropdownToggle"
+                    class="preset-toggle"
+                    aria-label="Toggle preset list"
+                  >
+                    ▾
+                  </button>
+                  <div id="presetDropdownMenu" class="preset-dropdown"></div>
+                </div>
+
+                <div class="preset-buttons">
+                  <button
+                    type="button"
+                    id="loadPresetBtn"
+                    class="btn btn-soft icon-btn"
+                    title="Load preset"
+                  >
+                    ⬇
+                  </button>
+                  <button
+                    type="button"
+                    id="savePresetBtn"
+                    class="btn btn-primary icon-btn"
+                    title="Save preset"
+                  >
+                    💾
+                  </button>
+                  <button
+                    type="button"
+                    id="deletePresetBtn"
+                    class="btn btn-outline icon-btn"
+                    title="Delete preset"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Prop Firm Username -->
+            <div class="field">
+              <label for="propUsername">Prop Firm Username</label>
+              <input
+                type="text"
+                id="propUsername"
+                name="propUsername"
+                placeholder="Enter your prop firm username"
+              >
+            </div>
+
+            <!-- API Key -->
+            <div class="field">
+              <label for="apiKey">API Key</label>
+                <input
+                  type="password"
+                  id="apiKey"
+                  name="apiKey"
+                  placeholder="Enter your API key"
+                  value="pWJDX8d9i2nUpAG3bcrGi4nVWFFmyXKcN8Ak1ZbF7nc="
+                >
+            </div>
+
+            <!-- Account -->
+            <div class="field">
+              <label for="accountInput">Account</label>
+              <input
+                type="text"
+                id="accountInput"
+                name="accountInput"
+                placeholder="e.g. 50KTC-V2-171261-99323003"
+              >
+            </div>
+
+            <!-- Symbol -->
+            <div class="field">
+              <label for="symbolInput">Symbol</label>
+              <input
+                type="text"
+                id="symbolInput"
+                name="symbolInput"
+                placeholder="e.g. MNQZ25"
+              >
+            </div>
+
+            <!-- Apply all account settings at once -->
+            <div class="field">
+              <button
+                type="button"
+                id="validateAndSave"
+                class="btn btn-primary btn-full"
+                onclick="applyAccount()"
+              >
+                Connect
+              </button>
+            </div>
+
+            <p id="tokenStatus" class="token-status">
+              <!-- Filled by script -->
+            </p>
+
+          </div>
         </div>
-      </div>
-      <div class="sessions">
-        <div style="height:10px;"></div> 
-            <!-- Custom Session 1 -->
-        <div style="margin-bottom: 15px;">
-          <label>Session 1:</label>
-          <input type="checkbox" id="session1_enabled" name="session1_enabled" checked>
-          <input class="times" type="time" id="session1_start" name="session1_start" value="06:29">
-          <span>–</span>
-          <input class="times" type="time" id="session1_end" name="session1_end" value="12:41">
+      </aside>
+
+      <!-- RIGHT: Trading Parameters / Sessions / Macro -->
+      <section class="main">
+        <div class="card">
+          <div class="card-header card-header-tabs">
+
+            <div class="tabs">
+              <button class="tab-button active" data-tab="tp">Trading Params</button>
+              <button class="tab-button" data-tab="sessions">Custom Sessions</button>
+              <button class="tab-button" data-tab="macro">Macro</button>
+              <button class="tab-button" data-tab="test">Test Order</button>
+            </div>
+          </div>
+
+          <div class="card-body">
+
+            <!-- TAB: Trading Params -->
+            <div class="tab-content active" id="tab-tp">
+              <!-- Mode: Levels / Ticks -->
+              <div class="field">
+                <label><strong>Mode</strong></label>
+                <div class="mode-row">
+                  <label class="mode-option">
+                    <input
+                      type="radio"
+                      id="useLevels"
+                      name="tpslMethod"
+                      value="levels"
+                      checked
+                    >
+                    Levels
+                  </label>
+                  <label class="mode-option">
+                    <input
+                      type="radio"
+                      id="useTicks"
+                      name="tpslMethod"
+                      value="ticks"
+                    >
+                    Ticks
+                  </label>
+                </div>
+              </div>
+
+              <!-- Ticks settings -->
+              <div id="ticksSettingsGroup">
+                <div class="grid-3">
+                  <div class="field">
+                    <label for="contracts">Contracts</label>
+                    <input type="number" id="contracts" placeholder="0">
+                  </div>
+
+                  <div class="field">
+                    <label for="takeProfit">Take Profit</label>
+                    <input type="number" id="takeProfit" placeholder="0">
+                  </div>
+
+                  <div class="field">
+                    <label for="stopLoss">Stop Loss</label>
+                    <input type="number" id="stopLoss" placeholder="0">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Levels settings -->
+              <div id="levelsSettingsGroup">
+                <div class="grid-3">
+                  <div class="field">
+                    <label for="contractsTP1">TP1 Contracts</label>
+                    <input type="number" id="contractsTP1">
+                  </div>
+
+                  <div class="field">
+                    <label for="contractsTP2">TP2 Contracts</label>
+                    <input type="number" id="contractsTP2">
+                  </div>
+                </div>
+
+
+                <div class="field">
+                    <label>Breakeven Options</label>
+                    <div class="be-row">
+                      <label><input type="radio" id="beFirstInt" name="beMethod" value="first"> First Level</label>
+                      <label><input type="radio" id="beAtTP1" name="beMethod" value="tp1"> TP 1</label>
+                      <label><input type="radio" id="beNone" name="beMethod" value="" checked> None</label>
+                    </div>
+                  </div>
+                <div class="grid-3">
+                  <div class="field">
+                    <label for="backupTP1">Backup TP1</label>
+                    <input type="number" id="backupTP1">
+                  </div>
+                  <div class="field">
+                    <label for="backupTP2">Backup TP2</label>
+                    <input type="number" id="backupTP2">
+                  </div>
+                  <div class="field">
+                    <label for="backupSL">Backup SL</label>
+                    <input type="number" id="backupSL">
+                  </div>
+                </div>
+
+                <p class="hint">
+                  *If either TP1 or TP2 is missing, the backup values are used…*
+                </p>
+              </div>
+            </div>
+
+            <!-- TAB: Custom Sessions -->
+            <div class="tab-content" id="tab-sessions">
+              <div class="field">
+                <label><strong>Custom Time Sessions</strong></label>
+              </div>
+
+              <div class="sessions">
+                <!-- Session 1 -->
+                <div class="session-row">
+                  <label>Session 1</label>
+                  <input
+                    type="checkbox"
+                    id="session1_enabled"
+                    name="session1_enabled"
+                    checked
+                  >
+                  <input
+                    class="times"
+                    type="time"
+                    id="session1_start"
+                    name="session1_start"
+                    value="06:29"
+                  >
+                  <span>–</span>
+                  <input
+                    class="times"
+                    type="time"
+                    id="session1_end"
+                    name="session1_end"
+                    value="12:41"
+                  >
+                </div>
+
+                <!-- Session 2 -->
+                <div class="session-row">
+                  <label>Session 2</label>
+                  <input
+                    type="checkbox"
+                    id="session2_enabled"
+                    name="session2_enabled"
+                  >
+                  <input
+                    class="times"
+                    type="time"
+                    id="session2_start"
+                    name="session2_start"
+                    value="16:59"
+                  >
+                  <span>–</span>
+                  <input
+                    class="times"
+                    type="time"
+                    id="session2_end"
+                    name="session2_end"
+                    value="21:01"
+                  >
+                </div>
+
+                <!-- Session 3 -->
+                <div class="session-row">
+                  <label>Session 3</label>
+                  <input
+                    type="checkbox"
+                    id="session3_enabled"
+                    name="session3_enabled"
+                  >
+                  <input
+                    class="times"
+                    type="time"
+                    id="session3_start"
+                    name="session3_start"
+                    value="23:59"
+                  >
+                  <span>–</span>
+                  <input
+                    class="times"
+                    type="time"
+                    id="session3_end"
+                    name="session3_end"
+                    value="02:01"
+                  >
+                </div>
+              </div>
+            </div>
+
+            <!-- TAB: Macro -->
+            <div class="tab-content" id="tab-macro">
+              <div class="field">
+                <label><strong>Macro Time Settings</strong></label>
+              </div>
+
+              <label class="toggle">
+                <input type="checkbox" id="useMacro" name="useMacro">
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">Macro Times Only</span>
+              </label>
+
+              <p class="hint">
+                *Only works for NY session with first macro at 06:20 and last one at 12:50.
+                For Asian/London, macro times are ignored.*
+              </p>
+            </div>
+            <div class="tab-content" id="tab-test">
+              <!-- Test controls -->
+              <div class="test-row">
+                <div class="field">
+                  <label>Direction</label>
+                  <select id="testDirection">
+                    <option value="bullish">Bullish</option>
+                    <option value="bearish">Bearish</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label>Timeframe</label>
+                  <select id="testTimeframe">
+                    <option value="15sec">15 sec</option>
+                    <option value="30sec">30 sec</option>
+                    <option value="1min">1 min</option>
+                    <option value="2min">2 min</option>
+                    <option value="3min">3 min</option>
+                    <option value="5min">5 min</option>
+                    <option value="15min">15 min</option>
+                  </select>
+                </div>
+
+                <div class="field test-button-wrap">
+                  <label>&nbsp;</label>
+                  <button
+                    id="testRunBtn"
+                    class="btn btn-primary btn-full"
+                    onclick="runTest()"
+                  >
+                    TEST
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+          </div>
         </div>
+      </section>
+    </section>
 
-        <!-- Custom Session 2 -->
-        <div style="margin-bottom: 15px;">
-          <label>Session 2:</label>
-          <input type="checkbox" id="session2_enabled" name="session2_enabled" style="">
-          <input class="times" type="time" id="session2_start" name="session2_start" value="16:59">
-          <span>  –  </span>
-          <input class="times" type="time" id="session2_end" name="session2_end" value="21:01">
-        </div>
-
-        <!-- Custom Session 3 -->
-        <div style="margin-bottom: 15px;">
-          <label>Session 3:</label>
-          <input type="checkbox" id="session3_enabled" name="session3_enabled">
-          <input class="times" type="time" id="session3_start" name="session3_start" value="23:59">
-          <span>– </span>
-          <input class="times" type="time" id="session3_end" name="session3_end" value="02:01">
-        </div>    
-      </div>
-    </form>
-  </div>
-
-  <!-- ========================== -->
-  <!-- Test Buttons -->
-  <!-- ========================== -->
-  <div class="form-container" style="margin-top: 20px;">
-    <div class="test-wrapper">
-
-      <!-- Direction dropdown -->
-      <div class="test-item">
-        <label>Direction:</label>
-        <select id="testDirection">
-          <option value="bullish">Bullish</option>
-          <option value="bearish">Bearish</option>
-        </select>
-      </div>
-
-      <!-- Timeframe dropdown -->
-      <div class="test-item">
-        <label>Timeframe:</label>
-        <select id="testTimeframe">
-          <option value="15sec">15 sec</option>
-          <option value="30sec">30 sec</option>
-          <option value="1min">1 min</option>
-          <option value="2min">2 min</option>
-          <option value="3min">3 min</option>
-          <option value="5min">5 min</option>
-          <option value="15min">15 min</option>
-        </select>
-      </div>
-
-      <!-- Test Button -->
-      <button id="testRunBtn" class="start test-btn" onclick="runTest()">
-        TEST
+    <!-- ========================== -->
+    <!-- Center Start / Stop Control -->
+    <!-- ========================== -->
+    <section class="center-control">
+      <button
+        id="toggleButton"
+        class="start"
+        onclick="toggleBot()"
+      >
+        Start
       </button>
-    </div>
-  </div>
-  
+    </section>
+
+    <!-- ========================== -->
+    <!-- Logs Bottom (Full Width) -->
+    <!-- ========================== -->
+    <section class="logs-section">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Logs</h2>
+        </div>
+        <div class="card-body">
+          <div id="logs" class="log-stream"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
   <script src="{{ url_for('static', filename='script.js') }}"></script>
   <script>
+    // Levels vs Ticks enable/disable
     document.addEventListener("DOMContentLoaded", () => {
       const levelsRadio = document.getElementById("useLevels");
       const ticksRadio = document.getElementById("useTicks");
 
-      // Sections
-      const ticksSettings = document.querySelectorAll("#contracts, #takeProfit, #stopLoss");
+      const ticksSettings = document.querySelectorAll(
+        "#contracts, #takeProfit, #stopLoss"
+      );
       const levelsSettings = document.querySelectorAll(
-      "#contractsTP1, #contractsTP2, #beFirstInt, #beAtTP1, #beNone, #backupTP1, #backupTP2, #backupSL"
-    );
-
+        "#contractsTP1, #contractsTP2, #beFirstInt, #beAtTP1, #beNone, #backupTP1, #backupTP2, #backupSL"
+      );
 
       function updateSettingsState() {
         const useLevels = levelsRadio.checked;
 
-        // Enable/disable Ticks settings
-        ticksSettings.forEach(input => {
-          input.disabled = useLevels;
-          input.style.opacity = useLevels ? "0.5" : "1";
-        });
+        const ticksGroup = document.getElementById("ticksSettingsGroup");
+        const levelsGroup = document.getElementById("levelsSettingsGroup");
 
-        // Enable/disable Levels settings
-        levelsSettings.forEach(input => {
-          input.disabled = !useLevels;
-          input.style.opacity = !useLevels ? "0.5" : "1";
-        });
+        // Show/hide groups
+        if (useLevels) {
+          ticksGroup.classList.add("hidden");
+          levelsGroup.classList.remove("hidden");
+        } else {
+          ticksGroup.classList.remove("hidden");
+          levelsGroup.classList.add("hidden");
+        }
       }
 
-      // Run when the page loads
-      updateSettingsState();
 
-      // Add listeners
+      updateSettingsState();
       levelsRadio.addEventListener("change", updateSettingsState);
       ticksRadio.addEventListener("change", updateSettingsState);
+
+      // Tabs
+      const tabButtons = document.querySelectorAll(".tab-button");
+      const tabContents = {
+        tp: document.getElementById("tab-tp"),
+        sessions: document.getElementById("tab-sessions"),
+        macro: document.getElementById("tab-macro"),
+        test: document.getElementById("tab-test")
+      };
+
+      tabButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+          const tab = btn.dataset.tab;
+
+          tabButtons.forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+
+          Object.keys(tabContents).forEach(key => {
+            tabContents[key].classList.toggle("active", key === tab);
+          });
+        });
+      });
     });
   </script>
-
 </body>
 </html>
