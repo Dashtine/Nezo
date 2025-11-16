@@ -9,6 +9,7 @@ from flask import Flask, request, jsonify, render_template, Response
 from signalrcore.hub_connection_builder import HubConnectionBuilder
 from collections import deque
 from threading import Lock
+from trades_db import init_db, calculate_analytics, create_trade
 
 
 from preset_manager import (
@@ -141,6 +142,15 @@ def preset_delete():
     delete_preset(name)
     log_message(f"[Preset] Profile {name} deleted.")
     return jsonify({"status": "ok"})
+
+# ======================================================
+# Calculate Trades
+# ======================================================
+@app.route("/analytics/calc", methods=["POST"])
+def analytics_calc():
+    data = request.json
+    results = calculate_analytics(data)   # lives in trades_db.py
+    return jsonify(results)
 
 # ======================================================
 # LOGGING HELPERS
@@ -1185,6 +1195,7 @@ def macro_time_tracker():
 # ======================================================
 if __name__ == "__main__":
     # app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
+    init_db()
     app.run(host="0.0.0.0", port=5000, debug=True)
 
 

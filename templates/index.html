@@ -375,89 +375,121 @@
             <!-- TAB: Analytics -->
             <div class="tab-content" id="tab-analytics">
 
-              *******NOT FINISHED YET*******
-                  <!-- FROM + TO row -->
-                <div class="form-row analytics-row">
-                  <div class="form-group">
-                      <label for="analytics-from">From</label>
-                      <input type="datetime-local" id="analytics-from" class="input-field analytics-dt">
-                  </div>
+                <!-- INPUTS WRAPPER -->
+                <div id="analytics-inputs">
 
-                  <div class="form-group">
-                      <label for="analytics-to">To</label>
-                      <input type="datetime-local" id="analytics-to" class="input-field analytics-dt">
-                  </div>
-                </div>
+                    <!-- FROM + TO row -->
+                    <div class="form-row analytics-row">
+                        <div class="form-group">
+                            <label for="analytics-from">From</label>
+                            <input type="datetime-local" id="analytics-from" class="input-field analytics-dt">
+                        </div>
 
+                        <div class="form-group">
+                            <label for="analytics-to">To</label>
+                            <input type="datetime-local" id="analytics-to" class="input-field analytics-dt">
+                        </div>
+                    </div>
 
-                <!-- Timeframe -->
-                <div class="form-group" style="margin-bottom: 10px; margin-top: 10px;">
-                    <label>Timeframes</label>
+                    <!-- Timeframe -->
+                    <div class="form-group" style="margin-bottom: 10px; margin-top: 10px;">
+                        <label>Timeframes</label>
 
-                    <div class="tf-checkboxes">
+                        <div class="tf-checkboxes">
 
-                        <label class="tf-item">
-                            <input type="checkbox" value="all" class="tf-check">
-                            All
-                        </label>
+                            <label class="tf-item">
+                                <input type="checkbox" value="all" class="tf-check">
+                                All
+                            </label>
 
-                        <label class="tf-item">
-                            <input type="checkbox" value="15s" class="tf-check">
-                            15s
-                        </label>
+                            <label class="tf-item">
+                                <input type="checkbox" value="15s" class="tf-check">
+                                15s
+                            </label>
 
-                        <label class="tf-item">
-                            <input type="checkbox" value="30s" class="tf-check">
-                            30s
-                        </label>
+                            <label class="tf-item">
+                                <input type="checkbox" value="30s" class="tf-check">
+                                30s
+                            </label>
 
-                        <label class="tf-item">
-                            <input type="checkbox" value="1m" class="tf-check">
-                            1m
-                        </label>
+                            <label class="tf-item">
+                                <input type="checkbox" value="1m" class="tf-check">
+                                1m
+                            </label>
 
-                        <label class="tf-item">
-                            <input type="checkbox" value="2m" class="tf-check">
-                            2m
-                        </label>
+                            <label class="tf-item">
+                                <input type="checkbox" value="2m" class="tf-check">
+                                2m
+                            </label>
 
-                        <label class="tf-item">
-                            <input type="checkbox" value="3m" class="tf-check">
-                            3m
-                        </label>
-                        
-                        <label class="tf-item">
-                            <input type="checkbox" value="5m" class="tf-check">
-                            5m
-                        </label>
+                            <label class="tf-item">
+                                <input type="checkbox" value="3m" class="tf-check">
+                                3m
+                            </label>
+                            
+                            <label class="tf-item">
+                                <input type="checkbox" value="5m" class="tf-check">
+                                5m
+                            </label>
 
-                        <label class="tf-item">
-                            <input type="checkbox" value="15m" class="tf-check">
-                            15m
-                        </label>
+                            <label class="tf-item">
+                                <input type="checkbox" value="15m" class="tf-check">
+                                15m
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Account -->
+                    <div class="form-group" style="margin-bottom: 15px; max-width:96%;">
+                        <label for="analytics-account">Account</label>
+                        <input 
+                            type="text" 
+                            id="analytics-account" 
+                            class="input-field"
+                            placeholder="e.g. PRACTICEOCT29123 or leave blank for all"
+                            value=""
+                        >
+                    </div>
+
+                    <!-- Symbol -->
+                    <div class="form-group" style="margin-bottom: 15px; max-width:96%;">
+                        <label for="analytics-symbol">Symbol</label>
+                        <input 
+                            type="text" 
+                            id="analytics-symbol" 
+                            class="input-field"
+                            placeholder="e.g. nq  (no need for nqz25 / mnqz25) or leave blank for all"
+                            value=""
+                        >
+                    </div>
+
+                    <!-- Calculate Button -->
+                    <button 
+                        id="analytics-calc-btn" 
+                        class="primary-btn"
+                        style="width: 100%; margin-top: 10px;"
+                    >
+                        Calculate
+                    </button>
+
+                </div> <!-- end inputs wrapper -->
+
+                <!-- RESULTS WRAPPER -->
+                <div id="analytics-results" style="display:none;">
+                    <div class="results-card" style="margin-top: 12px;">
+                        <h3 style="margin-bottom: 15px;">Results</h3>
+                        <p>Win Rate: <span id="res-winrate">--</span></p>
+                        <p>Average R:R: <span id="res-rr">--</span></p>
+                        <p>Trades: <span id="res-trades">--</span></p>
+                        <p>Wins: <span id="res-wins">--</span></p>
+                        <p>Losses: <span id="res-losses">--</span></p>
+
+                        <button id="analytics-back-btn" class="primary-btn" style="margin-top: 20px;">
+                            Back
+                        </button>
                     </div>
                 </div>
 
-                  <!-- Calculate Button -->
-                  <button 
-                      id="analytics-calc-btn" 
-                      class="primary-btn"
-                      style="width: 100%; margin-top: 10px;"
-                  >
-                      Calculate
-                  </button>
-
-                  <!-- Results -->
-                  <div class="results-card" style="margin-top: 12px;">
-                      <h3 style="margin-bottom: 15px;">Results</h3>
-                      <p>Win Rate: <span id="res-winrate">--</span></p>
-                      <p>Average R:R: <span id="res-rr">--</span></p>
-                      <p>Trades: <span id="res-trades">--</span></p>
-                      <p>Wins: <span id="res-wins">--</span></p>
-                      <p>Losses: <span id="res-losses">--</span></p>
-                  </div>
-
-              
             </div>
 
             <!-- TAB: Test Order -->

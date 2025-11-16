@@ -462,6 +462,58 @@ function saveSettings() {
   });
 }
 
+/* CALCULATE ANALYTICS */ 
+document.getElementById("analytics-calc-btn").onclick = async function () {
+
+    // collect inputs
+    const from = document.getElementById("analytics-from").value;
+    const to = document.getElementById("analytics-to").value;
+    const account = document.getElementById("analytics-account").value.trim();
+    const symbol = document.getElementById("analytics-symbol").value.trim();
+
+    // collect timeframe selections
+    const tfs = Array.from(document.querySelectorAll(".tf-check:checked"))
+        .map(x => x.value);
+
+    const payload = {
+        from,
+        to,
+        account,
+        symbol,
+        timeframes: tfs
+    };
+
+    try {
+        const res = await fetch("/analytics/calc", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        // update results card
+        document.getElementById("res-winrate").innerText = data.win_rate;
+        document.getElementById("res-rr").innerText = data.avg_rr;
+        document.getElementById("res-trades").innerText = data.total_trades;
+        document.getElementById("res-wins").innerText = data.wins;
+        document.getElementById("res-losses").innerText = data.losses;
+
+        // hide inputs, show results
+        document.getElementById("analytics-inputs").style.display = "none";
+        document.getElementById("analytics-results").style.display = "block";
+
+    } catch (err) {
+        console.log("Analytics error:", err);
+    }
+};
+
+document.getElementById("analytics-back-btn").onclick = function () {
+    document.getElementById("analytics-results").style.display = "none";
+    document.getElementById("analytics-inputs").style.display = "block";
+};
+
+
 // ===== Testing =====
 function runTest() {
   const direction = document.getElementById("testDirection").value;
