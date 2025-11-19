@@ -3,6 +3,7 @@ import logging
 import time
 import requests
 import string
+import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from flask import Flask, request, jsonify, render_template, Response
@@ -78,7 +79,7 @@ trade_state = {
     "brackets_set": False        # True once TP/SL orders are placed
 }
 
-AUTHORIZED_USER = "jkpqismuggle"
+AUTHORIZED_USER = ""
 running = False
 trade_lock = False
 log_messages = []
@@ -167,6 +168,7 @@ def log_message(message):
 
 def generate_logs():
     idx = 0
+    
     while True:
         with log_lock:
             if idx < len(log_messages):
@@ -177,8 +179,8 @@ def generate_logs():
                 out = ": keepalive\n\n"
 
         yield out
-        time.sleep(0.1)
 
+        time.sleep(0.1)
 
 # ======================================================
 # USERHUB CONNECTION
@@ -186,6 +188,7 @@ def generate_logs():
 
 def start_userhub():
     global hub_connection, trade_state
+    hub_closed = False
     token = settings.get("token")
     account_id = settings.get("accountId")
     if not token or not account_id:
@@ -218,7 +221,10 @@ def start_userhub():
             print(f"[Topstep] Subscribed to account {account_id}")
 
         def on_close():
+            nonlocal hub_closed
+            hub_closed = True
             log_message("[Topstep] Connection closed.")
+
 
         def on_error(err):
             log_message(f"[Topstep] Error: {err}")
@@ -389,11 +395,19 @@ def start_userhub():
         
         connection.start()
         log_message("[Topstep] Connection thread started, waiting for events...")
-        while not stop_event.is_set():
-            stop_event.wait(5)
+        while not stop_event.is_set() and not hub_closed:
+            if stop_event.wait(5):
+                break
+
 
     except Exception as e:
         log_message(f"[Topstep] Failed to start: {e}")
+
+    finally:
+        try:
+            connection.stop()
+        except:
+            pass
 
 # ======================================================
 # ROUTES
@@ -601,10 +615,41 @@ def stop():
         if t.is_alive():
             t.join(timeout=2)
             log_message(f"[System] Thread '{name}' stopped.")
+    threads.clear()
 
     log_message("[Bot] Bot stopped successfully.")
     return jsonify({"success": True})
 
+@app.route("/shutdown", methods=["POST"])
+def shutdown():
+    log_message("[System] Shutdown requested.")
+
+    # 1. Stop bot logic first (threads, hub, running flag)
+    global running, hub_connection
+
+    running = False
+    stop_event.set()
+
+    try:
+        if hub_connection:
+            hub_connection.stop()
+            log_message("[UserHub] Disconnected.")
+    except Exception as e:
+        log_message(f"[UserHub] Error closing connection: {e}")
+
+    # Try to stop threads normally
+    for name, t in list(threads.items()):
+        if t.is_alive():
+            t.join(timeout=2)
+            if t.is_alive():
+                log_message(f"[System] Thread '{name}' refused normal shutdown.")
+
+    # 2. Hard exit if anything is still alive or if user wants full kill
+    threads.clear()
+    log_message("[System] Forcing full shutdown now.")
+    os._exit(0)
+
+    return jsonify({"success": True})
 
 @app.route("/logs")
 def logs():
@@ -1000,7 +1045,7 @@ def webhook_ifvg():
         trade_state["brackets_set"] = True
 
         # --- Log and return results ---
-        log_message(f"[Trade] TP1 order response: {tp1_resp} | TP2 order response: {tp2_resp} | SL order response: {sl_resp}")
+        # log_message(f"[Trade] TP1 order response: {tp1_resp} | TP2 order response: {tp2_resp} | SL order response: {sl_resp}")
 
         trade_lock = False
 
@@ -1059,23 +1104,26 @@ def breakeven_monitor():
 
     while not stop_event.is_set():
         if not trade_state.get("active"):
-            time.sleep(3)
+            if stop_event.wait(3):
+                break
             continue
         be_price = trade_state.get("be_price") 
         if not be_price:
-            time.sleep(3)
+            if stop_event.wait(3):
+                break
             continue
-        
+    
         sl_order = trade_state.get("sl_order")
         if not sl_order:
             print("[BE] SL order not yet available, skipping this cycle.")
-            time.sleep(3)
+            if stop_event.wait(3):
+                break
             continue
-
         bar = get_3sec_bar(settings["contractId"], settings["token"])
 
         if not bar:
-            time.sleep(3)
+            if stop_event.wait(3):
+                break
             continue
         high = float(bar.get("high", 0))
         low = float(bar.get("low", 0))
@@ -1111,7 +1159,7 @@ def macro_time_tracker():
     global macro_time_active, running
     tz = ZoneInfo("America/Los_Angeles")
 
-    while running:
+    while not stop_event.is_set():
         now = datetime.now(tz)
         hour, minute = now.hour, now.minute
         current_minutes = hour * 60 + minute
@@ -1186,9 +1234,8 @@ def macro_time_tracker():
         # ----------------------------------------
         macro_time_active = in_session and macro_window
 
-        time.sleep(1)
-
-
+        if stop_event.wait(1):
+            break
 
 # ======================================================
 # RUN

@@ -542,3 +542,16 @@ function startLogStream() {
     logContainer.scrollTop = logContainer.scrollHeight;
   };
 }
+
+// ===== FULL SHUTDOWN =====
+document.getElementById("shutdownBtn").addEventListener("click", () => {
+    if (!confirm("Are you sure you want to fully shut down the bot?")) return;
+
+    fetch("/shutdown", { method: "POST" })
+        .then(res => res.json())
+        .then(data => {
+            console.log("Shutdown:", data);
+        })
+        .catch(err => console.error("Shutdown error:", err));
+});
+
