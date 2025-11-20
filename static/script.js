@@ -420,7 +420,7 @@ function toggleBot() {
 function saveSettings() {
   const selectedMethod = document.querySelector('input[name="tpslMethod"]:checked');
   const selectedBE = document.querySelector('input[name="beMethod"]:checked');
-
+  
   const tpslMethod = selectedMethod.value;
   const beMethod = selectedBE.value;
   const settings = {

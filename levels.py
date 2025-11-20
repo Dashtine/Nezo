@@ -19,7 +19,7 @@ def fmt_swing_list(swings, label):
 # ======================================================
 # BAR FETCHER
 # ======================================================
-def retrieve_bars(contract_id, token, unit=2, unit_number=3, limit=10000):
+def retrieve_bars(contract_id, token, unit=2, unit_number=3, limit=10000, inc_partial=False):
     """Fetch recent bars from TopstepX API (supports seconds or minutes, all UTC)."""
     # print(f"[Bars] limit={limit} | unit_number={unit_number}")
 
@@ -38,7 +38,7 @@ def retrieve_bars(contract_id, token, unit=2, unit_number=3, limit=10000):
             else:
                 floored_minute = (now_utc.minute // unit_number) * unit_number
                 end_utc = now_utc.replace(minute=floored_minute, second=0, microsecond=0)
-            start_utc = end_utc - timedelta(minutes=10000 * unit_number)
+            start_utc = end_utc - timedelta(minutes=5000 * unit_number)
 
         print(f"Start UTC: {start_utc.isoformat()} | End UTC: {end_utc.isoformat()}")
 
@@ -50,7 +50,7 @@ def retrieve_bars(contract_id, token, unit=2, unit_number=3, limit=10000):
             "unit": unit,                   # 1 = seconds, 2 = minutes
             "unitNumber": unit_number,
             "limit": limit,
-            "includePartialBar": False       
+            "includePartialBar": inc_partial       
         }
 
         resp = requests.post(API_URL, headers=headers, json=payload)
@@ -143,7 +143,7 @@ def detect_swings(bars):
 
     last_bar = bars[-1]
     last_low, last_high = float(last_bar["l"]), float(last_bar["h"])
-    print(f"last_low={last_low}, last_high={last_high}")
+    # print(f"last_low={last_low}, last_high={last_high}")
 
     for i in range(1, len(bars) - 1):
         prev_bar, bar, next_bar = bars[i-1], bars[i], bars[i+1]
@@ -191,7 +191,7 @@ def detect_fvg(bars):
                 "gap_bottom": float(c3["h"])
             })
 
-    print(f"[Levels] Detected {len(bullish_fvgs)} bullish and {len(bearish_fvgs)} bearish FVGs.")
+    # print(f"[Levels] Detected {len(bullish_fvgs)} bullish and {len(bearish_fvgs)} bearish FVGs.")
     return bullish_fvgs, bearish_fvgs
 
 
@@ -290,7 +290,7 @@ if __name__ == "__main__":
     TOKEN = "<your_token_here>"
     CONTRACT_ID = "CON.F.US.MNQ.Z25"
 
-    bars = retrieve_bars(CONTRACT_ID, TOKEN, unit_number=3, limit=200)
+    bars = retrieve_bars(CONTRACT_ID, TOKEN, unit_number=3, limit=200, inc_partial=False)
     if not bars:
         print("[Levels] No bars retrieved — exiting.")
     else:

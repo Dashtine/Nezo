@@ -30,6 +30,7 @@ from topstepx_api import (
     get_latest_position
 )
 from levels import retrieve_bars, detect_swings, detect_fvg, get_levels, get_3sec_bar
+from market_cache import init_timeframe_cache, get_cached_structures, start_cache_refresher, quick_refresh
 
 # ======================================================
 # CONFIGURATION
@@ -66,20 +67,25 @@ settings = {
 }
 
 trade_state = {
-    "active": False,             # True while a position is open
-    "direction": None,           # 'bullish' or 'bearish'
-    "entry_price": None,         # Filled entry price
-    "entry_size": 0,             # Size of the entry position
-    "account_id": None,          # Account reference
-    "tp_orders": [],             # [tp1_order_id, tp2_order_id]
-    "sl_order": None,            # stop-loss order id
-    "be_price": None,            # break-even price (future dynamic use)
-    "opened_at": None,           # ISO timestamp of trade open
-    "closed_at": None,           # ISO timestamp of trade close
-    "brackets_set": False        # True once TP/SL orders are placed
+    "active": False,
+    "direction": None,
+    "entry_price": None,
+    "entry_size": 0,
+    "account_id": None,
+    "tp_orders": [],
+    "sl_order": None,
+    "be_price": None,
+    "opened_at": None,
+    "closed_at": None,
+    "brackets_set": False,
+    "pending_direction": None,   # 🔹 used for Strategy A (levels mode)
+    "pending_timeframe": None,
+    "pending_symbol": None,
+    "pending_sl": 0
 }
 
-AUTHORIZED_USER = ""
+
+AUTHORIZED_USER = "jkpqismuggle"
 running = False
 trade_lock = False
 log_messages = []
@@ -289,12 +295,17 @@ def start_userhub():
                         log_message(f"[Topstep] {side} position OPENED @ {avg_price} (size={size})")
                         return
                 
+
+                side_label = "long" if ttype == 1 else "short"
+                entry_price = avg_price
+
+                # Brand new position JUST opened
                 if not trade_state.get("active"):
-                    # New position opened
+
                     trade_state.update({
                         "active": True,
-                        "direction": side.lower(),
-                        "entry_price": avg_price,
+                        "direction": side_label,
+                        "entry_price": entry_price,
                         "entry_size": size,
                         "account_id": account_id,
                         "opened_at": datetime.now(ZoneInfo("America/Los_Angeles")).isoformat(),
@@ -302,6 +313,106 @@ def start_userhub():
                     })
                     log_message(f"[Topstep] {side} position OPENED @ {avg_price} (size={size})")
 
+                    # ============================================================
+                    # STRATEGY A: PLACE BRACKETS HERE
+                    # ============================================================
+
+                    pending_dir = trade_state.get("pending_direction")
+
+                    if not pending_dir:
+                        log_message("[Trade] No pending direction stored. Skipping bracket placement.")
+                        return
+                    print("LINE 293")
+                    # Load cached structure (fast, no API calls)
+                    # quick_refresh(settings["contractId"], settings["token"], "1m")
+                    cache = get_cached_structures("1m")
+                    if not cache:
+                        log_message("[Trade] Cache unavailable. Cannot compute FVG/TP/SL levels.")
+                        return
+ 
+                    highs = cache["highs"]
+                    lows = cache["lows"]
+                    bullish_fvgs = cache["bullish_fvgs"]
+                    bearish_fvgs = cache["bearish_fvgs"]
+
+                    bars = cache["bars"]
+                    last_bar = bars[-1]
+                    entry_high = last_bar["h"]
+                    entry_low = last_bar["l"]
+
+                    # Determine correct entry reference
+                    if pending_dir == "bullish":
+                        levels = get_levels("bullish", entry_high, highs, lows, bullish_fvgs, bearish_fvgs)
+                    else:
+                        levels = get_levels("bearish", entry_low, highs, lows, bullish_fvgs, bearish_fvgs)
+
+                    sl_price = levels.get("sl")
+                    tp1_price = levels.get("tp1")
+                    tp2_price = levels.get("tp2")
+                    be_price = levels.get("be")
+
+                    if not sl_price or not tp1_price or not tp2_price:
+                        log_message("[Trade] Missing TP/SL levels. Aborting bracket placement.")
+                        return
+
+                    # Assign BE level
+                    if settings["beMethod"] == "first":
+                        trade_state["be_price"] = be_price
+                    elif settings["beMethod"] == "tp1":
+                        trade_state["be_price"] = tp1_price
+                    else:
+                        trade_state["be_price"] = None
+
+                    # Get contracts
+                    tp1_contracts = settings["contracts_tp1"]
+                    tp2_contracts = settings["contracts_tp2"]
+                    total_contracts = tp1_contracts + tp2_contracts
+
+                    token = settings["token"]
+                    contract_id = settings["contractId"]
+                    account_id = settings["accountId"]
+
+                    # ============================================================
+                    # Place TP/SL bracket orders
+                    # ============================================================
+                    if pending_dir == "bullish":
+                        print("PLACING TPS/SL")
+                        # TP1 Sell Limit
+                        tp1_resp = place_order(account_id, contract_id, 1, tp1_contracts,
+                                            0, 0, token, price=tp1_price, order_type=1)
+
+                        # TP2 Sell Limit
+                        tp2_resp = place_order(account_id, contract_id, 1, tp2_contracts,
+                                            0, 0, token, price=tp2_price, order_type=1)
+
+                        # SL Sell Stop
+                        sl_resp = place_order(account_id, contract_id, 1, total_contracts,
+                                            0, 0, token, price=sl_price, order_type=4)
+
+                    else:  # bearish
+                        # TP1 Buy Limit
+                        tp1_resp = place_order(account_id, contract_id, 0, tp1_contracts,
+                                            0, 0, token, price=tp1_price, order_type=1)
+
+                        # TP2 Buy Limit
+                        tp2_resp = place_order(account_id, contract_id, 0, tp2_contracts,
+                                            0, 0, token, price=tp2_price, order_type=1)
+
+                        # SL Buy Stop
+                        sl_resp = place_order(account_id, contract_id, 0, total_contracts,
+                                            0, 0, token, price=sl_price, order_type=4)
+
+                    # Save order IDs
+                    trade_state["tp_orders"] = [tp1_resp.get("orderId"), tp2_resp.get("orderId")]
+                    trade_state["sl_order"] = sl_resp.get("orderId")
+                    trade_state["brackets_set"] = True
+
+                    # Clear pending
+                    trade_state["pending_direction"] = None
+
+                    log_message(f"[Trade] Brackets placed → SL={sl_price} | TP1={tp1_price} | TP2={tp2_price}")
+
+                    return
                 else:
                     # Existing position adjusted (scaled in or partial reduction)
                     prev_size = trade_state.get("entry_size", 0)
@@ -351,9 +462,11 @@ def start_userhub():
                 try:
                     total_size = trade_state.get("entry_size", 0)
                     tp1_size = fill_volume                     # size of TP1 order
-                    remaining_size = max(total_size - tp1_size, 1)
 
-                    # Update trade_state size
+                    remaining_size = total_size - tp1_size
+                    if remaining_size <= 0:
+                        remaining_size = 0
+                        
                     trade_state["entry_size"] = remaining_size
 
                     # Modify SL order size and/or move to breakeven
@@ -448,8 +561,6 @@ def save_settings():
         settings["backup_sl"] = 0
     else:
         # Levels mode
-        settings["takeProfit"] = 0
-        settings["stopLoss"] = 0
         settings["contracts_tp1"] = int(data.get("contractsTP1", 0))
         settings["contracts_tp2"] = int(data.get("contractsTP2", 0))
         settings["beMethod"] = str(data.get("beMethod", ""))
@@ -592,7 +703,30 @@ def start():
     if settings["tpslMethod"] == "levels":
         start_thread("breakeven", breakeven_monitor)
 
+        # 🔹 NEW: Preload 1m swings/FVGs cache
+        contract_id = settings.get("contractId")
+        token = settings.get("token")
+
+        if contract_id and token:
+            try:
+                log_message("[LevelsCache] Preloading 1m swings/FVGs cache...")
+                ok = init_timeframe_cache(contract_id, token, tf_key="1m")
+                if ok:
+                    log_message("[LevelsCache] 1m cache warmed successfully.")
+                else:
+                    log_message("[LevelsCache] Failed to warm 1m cache (no bars).")
+                    
+                # 🔹 Start background refresher
+                start_cache_refresher(contract_id, token, stop_event)
+                log_message("[LevelsCache] Background refresher started (30s updates).")
+
+            except Exception as e:
+                log_message(f"[LevelsCache] Error preloading 1m cache: {e}")
+        else:
+            log_message("[LevelsCache] Skipped cache warm-up — missing contractId or token.")
+
     log_message(f"[Bot] Program ready — now taking in orders for {settings["contractName"]} | Mode: {settings["tpslMethod"].upper()} | BE Option: {settings["beMethod"].upper()}")
+
     return jsonify({"success": True})
 
 @app.route("/stop", methods=["POST"])
@@ -699,11 +833,13 @@ def webhook():
         return jsonify({"error": str(e)}), 400
 
 # ======================================================
-# WEBHOOK_IFVG : Uses IFVG strategy (market + limit orders)
+# WEBHOOK_IFVG : Uses IFVG strategy
+#   - ticks mode: market + brackets here
+#   - levels mode: MARKET ONLY, brackets handled in on_position_update
 # ======================================================
 @app.route("/webhook_ifvg", methods=["POST"])
 def webhook_ifvg():
-    global running,trade_lock, trade_state, in_ny_session
+    global running, trade_lock, trade_state, in_ny_session
 
     if not running:
         log_message("[Trade] Alert ignored; bot not running.")
@@ -721,11 +857,12 @@ def webhook_ifvg():
     if not macro_time_active:
         log_message("[Trade] Ignored alert — outside allowed time window.")
         return jsonify({"status": "ignored"})
-
-    
     trade_lock = True
 
     try:
+        # ---------------------------
+        # Parse incoming alert
+        # ---------------------------
         if request.is_json:
             data = request.get_json()
             message = data.get("message", "").lower().strip()
@@ -751,7 +888,31 @@ def webhook_ifvg():
             trade_lock = False
             return jsonify({"error": "Missing 'bullish' or 'bearish' keyword"}), 400
 
-        # If using ticks, place order here and exit
+        # Timeframe detection
+        timeframe_tokens = [
+            t for t in message.split()
+            if t.endswith(("min", "m", "sec", "s"))
+        ]
+
+        if not timeframe_tokens:
+            log_message("[Trade] No valid timeframe found. Aborting.")
+            trade_lock = False
+            return jsonify({"error": "Missing timeframe (e.g. '3min', '5m', '30sec')"}), 400
+
+        try:
+            unit_number = int(''.join(ch for ch in timeframe_tokens[0] if ch.isdigit()))
+            is_seconds = "sec" in timeframe_tokens[0] or timeframe_tokens[0].endswith("s")
+            unit_type = 1 if is_seconds else 2  # 1 = seconds, 2 = minutes (for future use if needed)
+        except ValueError:
+            log_message("[Trade] Invalid timeframe format. Aborting.")
+            trade_lock = False
+            return jsonify({"error": "Invalid timeframe format"}), 400
+
+        log_message(f"[Trade] Using timeframe: {unit_number} {'seconds' if is_seconds else 'minute'}")
+
+        # ======================================================
+        # TICKS MODE: TP & SL are placed here. That's it.
+        # ======================================================
         if settings["tpslMethod"] == "ticks":
             tp = settings["takeProfit"] * (1 if side == 0 else -1)
             sl = settings["stopLoss"] * (-1 if side == 0 else 1)
@@ -767,301 +928,66 @@ def webhook_ifvg():
             )
 
             trade_lock = False
+
             if order_resp.get("success"):
-                log_message(f"[Trade] {direction.upper()} market order placed successfully.")
+                log_message(f"[Trade] {direction.upper()} market order placed with TP/SL brackets.")
                 return jsonify({"status": "ok", "order": order_resp})
             
-            log_message("[Trade] Failed to create order.")
-            return jsonify({"status": "error", "order": order_resp})
+            log_message(f"[Trade] Failed to create market order: {order_resp}")
+            return jsonify({"status": "error", "order": order_resp}), 500
 
-        # Timeframe detection
-        timeframe_tokens = [
-            t for t in message.split()
-            if t.endswith(("min", "m", "sec", "s"))
-        ]
-
-        if not timeframe_tokens:
-            log_message("[Trade] No valid timeframe found. Aborting.")
-            trade_lock = False
-            return jsonify({"error": "Missing timeframe (e.g. '3min', '5m', '30sec')"}), 400
-
-        try:
-            # Extract numeric portion
-            unit_number = int(''.join(ch for ch in timeframe_tokens[0] if ch.isdigit()))
-            is_seconds = "sec" in timeframe_tokens[0] or timeframe_tokens[0].endswith("s")
-            # Set appropriate unit code for your API (assuming 2 = minutes, 1 = seconds)
-            unit_type = 1 if is_seconds else 2
-
-
-        except ValueError:
-            log_message("[Trade] Invalid timeframe format. Aborting.")
-            trade_lock = False
-            return jsonify({"error": "Invalid timeframe format"}), 400
-
-        
-        log_message(f"[Trade] Using timeframe: {unit_number} {'seconds' if is_seconds else 'minute'}")
-
+        # ======================================================
+        # LEVELS MODE: MARKET ENTRY ONLY
+        #   Brackets will be placed inside on_position_update
+        # ======================================================
         tp1_contracts = settings["contracts_tp1"]
         tp2_contracts = settings["contracts_tp2"]
         total_contracts = tp1_contracts + tp2_contracts
         settings["contracts"] = total_contracts
 
-        # === 1. MARKET ENTRY ===
+        # Save intended direction BEFORE placing the market order
+        trade_state["pending_direction"] = direction
+        trade_state["brackets_set"] = False
+        trade_state["entry_size"] = total_contracts
+        print(settings["contracts"])
+
         order_resp = place_order(
             settings["accountId"],
             settings["contractId"],
             side,
             settings["contracts"],
-            0,  # TP placeholder
-            0,  # SL placeholder
+            0,  # no TP ticks here
+            0,  # no SL ticks here
             settings["token"],
             order_type=2  # MARKET
         )
-        
+
         if not order_resp.get("success"):
-            log_message(f"[Trade] {direction.upper()} market order failed: {order_resp}")
+            log_message(f"[Trade] Market order failed (levels mode): {order_resp}")
             trade_lock = False
-            return jsonify({"error": "Market order failed"}), 500
+            return jsonify({"error": "Market order failed", "order": order_resp}), 500
 
         log_message(f"[Trade] {direction.upper()} market order placed successfully.")
-
-        # === 1.5 FETCH REAL ENTRY PRICE ===
-        pos_data = get_latest_position(settings["accountId"], settings["token"])
-        if not pos_data:
-            log_message("[Trade] Position not found after order placement; using fallback candle close.")
-            entry_bar = retrieve_bars(settings["contractId"], settings["token"], unit=unit_type, unit_number=unit_number, limit=1)[-1]
-            entry_price = entry_bar["c"]
-        else:
-            entry_price = pos_data.get("averagePrice")
-            entry_bar = retrieve_bars(settings["contractId"], settings["token"], unit=unit_type, unit_number=unit_number, limit=1)[-1]
-            entry_low = entry_bar["l"]
-            entry_high = entry_bar["h"]
-
-            log_message(f"[Trade] Entry price set from position data: {entry_price}")
-
-        # === 2. RETRIEVE LEVELS ===
-        if unit_type == 2:
-            bars = retrieve_bars(settings["contractId"], settings["token"], unit=unit_type, unit_number=unit_number, limit=10000)
-        elif unit_type == 1:
-            bars = retrieve_bars(settings["contractId"], settings["token"], unit=unit_type, unit_number=unit_number, limit=5000)
-
-        if not bars:
-            log_message("[Trade] ❌ No bars retrieved. Aborting.")
-            trade_lock = False
-            return jsonify({"error": "Failed to retrieve bars"}), 500
-
-        highs, lows = detect_swings(bars)
-        bullish_fvgs, bearish_fvgs = detect_fvg(bars)
-        # === Sort and Display Recent Swing Points (Newest → Oldest) ===
-        # highs_sorted = sorted(highs, key=lambda x: x["time"], reverse=True)
-        # lows_sorted = sorted(lows, key=lambda x: x["time"], reverse=True)
-        # print('entry_high', entry_high)
-        # print("\n=== Recent Swing Highs (Newest → Oldest) ===")
-        # for h in highs_sorted[:15]:
-        #     if h['price'] > entry_high:
-        #         print(f"HIGH | {h['time']} | Price = {h['price']}")
-
-        # print("\n=== Recent Swing Lows (Newest → Oldest) ===")
-        # for l in lows_sorted[:15]:
-        #     print(f"LOW  | {l['time']} | Price = {l['price']}")
-
-        # Sort oldest → newest
-        # highs_sorted = sorted(highs, key=lambda x: x["time"])
-        # lows_sorted = sorted(lows, key=lambda x: x["time"])
-
-        # print("\n=== Oldest Swing Highs (Oldest → Newest) ===")
-        # for h in highs_sorted[:15]:
-        #     print(f"HIGH | {h['time']} | Price = {h['price']}")
-
-        # print("\n=== Oldest Swing Lows (Oldest → Newest) ===")
-        # for l in lows_sorted[:15]:
-        #     print(f"LOW  | {l['time']} | Price = {l['price']}")
-
-        if direction == "bullish":
-            levels = get_levels(direction, entry_high, highs, lows, bullish_fvgs, bearish_fvgs)
-        elif direction == "bearish":
-            levels = get_levels(direction, entry_low, highs, lows, bullish_fvgs, bearish_fvgs)
-        
-        sl_price = levels.get("sl")
-        tp1_price = levels.get("tp1")
-        tp2_price = levels.get("tp2")
-        be_price = levels.get("be")
-
-        # ----- Use back ups / ticks if levels were not found -----
-        if not tp1_price or not tp2_price or not sl_price:
-            contract = settings.get("contractName", "")
-            direction = direction.lower()
-            entry_price = float(entry_price)
-
-            # If both TP1 and TP2 levels were not found then use backup ticks.    
-            if not tp1_price or not tp2_price:
-                backup_tp1 = settings["backup_tp1"]
-                backup_tp2 = settings["backup_tp2"]
-
-                # Tick size detection
-                if "NQ" in contract:
-                    tick_size = 0.25
-                elif "GC" in contract:
-                    tick_size = 0.1
-                else:
-                    tick_size = 0.25  # fallback
-
-                # Direction-based math
-                if direction == "bullish":
-                    tp1_price = entry_price + (backup_tp1 * tick_size)
-                    tp2_price = entry_price + (backup_tp2 * tick_size)
-                elif direction == "bearish":
-                    tp1_price = entry_price - (backup_tp1 * tick_size)
-                    tp2_price = entry_price - (backup_tp2 * tick_size)
-                else:
-                    tp1_price, tp2_price = None, None
-
-                log_message(f"[Trade] Backup TPs applied for {backup_tp1} & {backup_tp2} ticks")
-
-
-            if not sl_price:
-                backup_sl = settings["backup_sl"]
-
-                # Define tick sizes per product type
-                if "NQ" in contract:
-                    tick_size = 0.25
-                elif "GC" in contract:
-                    tick_size = 0.1
-                else:
-                    tick_size = 0.25  # fallback
-
-                # Calculate stop loss based on direction
-                if direction == "bullish":
-                    sl_price = entry_price - (backup_sl * tick_size)
-                elif direction == "bearish":
-                    sl_price = entry_price + (backup_sl * tick_size)
-                else:
-                    sl_price = None  # unrecognized direction
-
-                log_message(f"[Trade] Backup SL applied for {backup_sl}")
-
-        if not sl_price or not tp1_price or not tp2_price:
-            log_message("[Trade] Missing one or more TP/SL levels.")
-            trade_lock = False
-            return jsonify({"error": "Invalid SL/TP values"}), 400
-
-        if settings["beMethod"] == "first":
-            log_message(f"[Trade] Levels → SL={sl_price} | BE={be_price} | {tp1_price} | TP2={tp2_price}")
-        elif settings["beMethod"] == "tp1":
-            log_message(f"[Trade] Levels → SL={sl_price} | BE/TP1: {tp1_price} | TP2={tp2_price}")
-        else:
-            log_message(f"[Trade] Levels → SL={sl_price} | BE=None | {tp1_price} | TP2={tp2_price}")
-            
-        # === 3. PLACE LIMIT ORDERS ===
-        log_message("[Trade] Placing TP1, TP2, and SL orders...")
-
-        if settings["beMethod"] == "first":
-            trade_state['be_price'] = be_price
-        elif settings["beMethod"] == "tp1":
-            trade_state["be_price"] = tp1_price
-
-        # --- LONG (bullish) setup ---
-        if direction == "bullish":
-            # TP1 (Sell Limit)
-            tp1_resp = place_order(
-                settings["accountId"],
-                settings["contractId"],
-                1,  # Sell
-                tp1_contracts,
-                0, 0,
-                settings["token"],
-                price=tp1_price,
-                order_type=1  # LIMIT
-            )
-
-            # TP2 (Sell Limit)
-            tp2_resp = place_order(
-                settings["accountId"],
-                settings["contractId"],
-                1,  # Sell
-                tp2_contracts,
-                0, 0,
-                settings["token"],
-                price=tp2_price,
-                order_type=1  # LIMIT
-            )
-
-            # SL (Sell Stop)
-            sl_resp = place_order(
-                settings["accountId"],
-                settings["contractId"],
-                1,  # Sell
-                total_contracts,
-                0, 0,
-                settings["token"],
-                price=sl_price,
-                order_type=4  # STOP
-            )
-
-        # --- SHORT (bearish) setup ---
-        else:
-            # TP1 (Buy Limit)
-            tp1_resp = place_order(
-                settings["accountId"],
-                settings["contractId"],
-                0,  # Buy
-                tp1_contracts,
-                0, 0,
-                settings["token"],
-                price=tp1_price,
-                order_type=1  # LIMIT
-            )
-
-            # TP2 (Buy Limit)
-            tp2_resp = place_order(
-                settings["accountId"],
-                settings["contractId"],
-                0,  # Buy
-                tp2_contracts,
-                0, 0,
-                settings["token"],
-                price=tp2_price,
-                order_type=1  # LIMIT
-            )
-
-            # SL (Buy Stop)
-            sl_resp = place_order(
-                settings["accountId"],
-                settings["contractId"],
-                0,  # Buy
-                total_contracts,
-                0, 0,
-                settings["token"],
-                price=sl_price,
-                order_type=4  # STOP
-            )
-
-        # --- Record bracket orders in trade_state ---
-        trade_state["tp_orders"] = [
-            tp1_resp.get("orderId"),
-            tp2_resp.get("orderId")
-        ]
-        trade_state["sl_order"] = sl_resp.get("orderId")
-        trade_state["brackets_set"] = True
-
-        # --- Log and return results ---
-        # log_message(f"[Trade] TP1 order response: {tp1_resp} | TP2 order response: {tp2_resp} | SL order response: {sl_resp}")
 
         trade_lock = False
 
         return jsonify({
             "status": "ok",
+            "mode": "levels",
+            "message": "Market order placed. Brackets will be set on position fill.",
             "direction": direction,
-            "timeframe": unit_number,
-            "levels": {"sl": sl_price, "tp1": tp1_price, "tp2": tp2_price},
-            "tp1_response": tp1_resp,
-            "tp2_response": tp2_resp,
-            "sl_response": sl_resp
+            "timeframe": {
+                "unit_type": unit_type,
+                "unit_number": unit_number,
+                "is_seconds": is_seconds
+            }
         })
-    
+
     except Exception as e:
+        trade_lock = False
         log_message(f"[Trade] Error: {e}")
         return jsonify({"error": str(e)}), 500
+
 
 # ======================================================
 # Threads
@@ -1103,11 +1029,13 @@ def breakeven_monitor():
     global trade_state
 
     while not stop_event.is_set():
+        # Only check when a trade is active AND brackets exist
         if not trade_state.get("active"):
             if stop_event.wait(3):
                 break
             continue
-        be_price = trade_state.get("be_price") 
+
+        be_price = trade_state.get("be_price")
         if not be_price:
             if stop_event.wait(3):
                 break
@@ -1120,40 +1048,47 @@ def breakeven_monitor():
                 break
             continue
         bar = get_3sec_bar(settings["contractId"], settings["token"])
-
         if not bar:
             if stop_event.wait(3):
                 break
             continue
-        high = float(bar.get("high", 0))
-        low = float(bar.get("low", 0))
+        high = float(bar["high"])
+        low = float(bar["low"])
+        
+        direction = trade_state.get("direction")
+        entry_price = trade_state.get("entry_price")
+        entry_size = trade_state.get("entry_size")
 
-        # --- LONG ---
+        # === LONG BE Trigger ===
         if trade_state["direction"] == "long" and high >= be_price:
             log_message(f"[BE] Breakeven hit @ {bar['high']}. Moving SL to BE.")
             modify_order(
                 settings["accountId"],
                 sl_order,
-                new_size=trade_state["entry_size"],
+                new_size=entry_size,
                 token=settings["token"],
-                stop_price=trade_state["entry_price"]
+                stop_price=entry_price
             )
+
             trade_state["be_price"] = None
+            continue
 
         # --- SHORT ---
         elif trade_state["direction"] == "short" and low <= be_price:
-            log_message(f"[BE] Breakeven hit @ {bar['low']}. Moving SL to BE.")
+            log_message(f"[BE] Breakeven hit @ {bar['high']}. Moving SL to BE.")
             modify_order(
                 settings["accountId"],
                 sl_order,
-                new_size=trade_state["entry_size"],
+                new_size=entry_size,
                 token=settings["token"],
-                stop_price=trade_state["entry_price"]
+                stop_price=entry_price
             )
-            trade_state["be_price"] = None
 
-        stop_event.wait(5)
-    log_message("[BE Monitor] exited.")
+            trade_state["be_price"] = None
+            continue
+
+        time.sleep(2)
+
 
 def macro_time_tracker():
     global macro_time_active, running
