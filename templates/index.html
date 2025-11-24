@@ -173,7 +173,7 @@
         </div>
       </aside>
 
-      <!-- RIGHT: Trading Parameters / Sessions / Macro -->
+      <!-- RIGHT: Trading Parameters / Sessions / Extra -->
       <section class="main">
         <div class="card">
           <div class="card-header card-header-tabs">
@@ -181,7 +181,7 @@
             <div class="tabs">
               <button class="tab-button active" data-tab="tp">Trading Params</button>
               <button class="tab-button" data-tab="sessions">Custom Sessions</button>
-              <button class="tab-button" data-tab="macro">Macro</button>
+              <button class="tab-button" data-tab="extra">Extra</button>
               <button class="tab-button" data-tab="analytics">Analytics</button>
               <button class="tab-button" data-tab="test">Test Order</button>
             </div>
@@ -366,11 +366,28 @@
               </div>
             </div>
 
-            <!-- TAB: Macro -->
-            <div class="tab-content" id="tab-macro">
+            <!-- TAB: Extra -->
+            <div class="tab-content" id="tab-extra">
               <div class="field">
-                <label><strong>Macro Time Settings</strong></label>
+                <label><strong>HTF Swing Sweep Timeframe:</strong></label>
+                <select id="htfSweepTf" name="htfSweepTf" style="width:200px;">
+                  <option value="">Select timeframe</option>
+                  <option value="15m">15m</option>
+                  <option value="30m">30m</option>
+                  <option value="1h">1h</option>
+                  <option value="4h">4h</option>
+                </select>
+                <p class="hint">
+                  *Only trade after a higher-timeframe swing gets swept. 
+                  If a swing high gets taken, it only looks for sells. If a swing low gets taken, it only looks for buys.*
+                </p>
+
               </div>
+
+              <p class="hint"></p>
+                <div class="field">
+                  <label><strong>Macro Time Settings</strong></label>
+                </div>
 
               <label class="toggle">
                 <input type="checkbox" id="useMacro" name="useMacro">
@@ -490,11 +507,41 @@
                 <div id="analytics-results" style="display:none;">
                     <div class="results-card" style="margin-top: 12px;">
                         <h3 style="margin-bottom: 15px;">Results</h3>
-                        <p>Win Rate: <span id="res-winrate">--</span></p>
-                        <p>Average R:R: <span id="res-rr">--</span></p>
-                        <p>Trades: <span id="res-trades">--</span></p>
-                        <p>Wins: <span id="res-wins">--</span></p>
-                        <p>Losses: <span id="res-losses">--</span></p>
+                        <div class="stats-grid">
+                          <div class="stat-tile">
+                              <div class="stat-label">Win Rate</div>
+                              <div class="stat-value" id="res-winrate">0%</div>
+                          </div>
+
+                          <div class="stat-tile">
+                              <div class="stat-label">Average R:R</div>
+                              <div class="stat-value" id="res-rr">0</div>
+                          </div>
+
+                          <div class="stat-tile">
+                              <div class="stat-label">Total Trades</div>
+                              <div class="stat-value" id="res-trades">0</div>
+                          </div>
+
+                          <div class="stat-tile">
+                              <div class="stat-label">Wins</div>
+                              <div class="stat-value win" id="res-wins">0</div>
+                          </div>
+
+                          <div class="stat-tile">
+                              <div class="stat-label">Losses</div>
+                              <div class="stat-value loss" id="res-losses">0</div>
+                          </div>
+
+                          <div class="stat-tile">
+                              <div class="stat-label">Breakevens</div>
+                              <div class="stat-value" id="res-be">0</div>
+                          </div>
+                        </div>
+
+                        <div class="stat-footnote">
+                            *Wins include TP1 → BE scenarios
+                        </div>
 
                         <button id="analytics-back-btn" class="primary-btn" style="margin-top: 20px;">
                             Back
@@ -616,7 +663,7 @@
       const tabContents = {
         tp: document.getElementById("tab-tp"),
         sessions: document.getElementById("tab-sessions"),
-        macro: document.getElementById("tab-macro"),
+        extra: document.getElementById("tab-extra"),
         analytics: document.getElementById("tab-analytics"),
         test: document.getElementById("tab-test")
       };

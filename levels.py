@@ -40,7 +40,7 @@ def retrieve_bars(contract_id, token, unit=2, unit_number=3, limit=10000, inc_pa
                 end_utc = now_utc.replace(minute=floored_minute, second=0, microsecond=0)
             start_utc = end_utc - timedelta(minutes=5000 * unit_number)
 
-        print(f"Start UTC: {start_utc.isoformat()} | End UTC: {end_utc.isoformat()}")
+        # print(f"Start UTC: {start_utc.isoformat()} | End UTC: {end_utc.isoformat()}")
 
         payload = {
             "contractId": contract_id,
@@ -81,7 +81,7 @@ def retrieve_bars(contract_id, token, unit=2, unit_number=3, limit=10000, inc_pa
         return []
 
 
-def get_3sec_bar(contract_id, token):
+def get_2sec_bar(contract_id, token):
     """Fetch the most recent 3-second bar from TopstepX API (UTC)."""
     global _last_no_bar_log
     try:
@@ -97,7 +97,7 @@ def get_3sec_bar(contract_id, token):
             "startTime": start_utc.isoformat(),
             "endTime": end_utc.isoformat(),
             "unit": 1,                # 1 = seconds
-            "unitNumber": 3,          # 3-second bars
+            "unitNumber": 2,          # 2-second bars
             "limit": 1,               # only the latest bar
             "includePartialBar": True # allow the current forming bar
         }
@@ -114,7 +114,7 @@ def get_3sec_bar(contract_id, token):
             now = time.time()
             # log this message only every 15 seconds
             if now - _last_no_bar_log >= 300:
-                print("[Levels] No 3-second bars returned.")
+                print("[Levels] No 2-second bars returned.")
                 _last_no_bar_log = now
             return None
 
@@ -129,7 +129,7 @@ def get_3sec_bar(contract_id, token):
         }
 
     except Exception as e:
-        print(f"[Levels] Failed to retrieve 3-second bar: {e}")
+        print(f"[Levels] Failed to retrieve 2-second bar: {e}")
         return None
     
 # ======================================================

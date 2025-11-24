@@ -10,7 +10,7 @@ from flask import Flask, request, jsonify, render_template, Response
 from signalrcore.hub_connection_builder import HubConnectionBuilder
 from collections import deque
 from threading import Lock
-from trades_db import init_db, calculate_analytics, create_trade
+from trades_db import init_db, calculate_analytics, create_trade, update_trade
 
 
 from preset_manager import (
@@ -29,7 +29,7 @@ from topstepx_api import (
     modify_order,
     get_latest_position
 )
-from levels import retrieve_bars, detect_swings, detect_fvg, get_levels, get_3sec_bar
+from levels import retrieve_bars, detect_swings, detect_fvg, get_levels, get_2sec_bar
 from market_cache import init_timeframe_cache, get_cached_structures, start_cache_refresher, quick_refresh
 
 # ======================================================
@@ -81,7 +81,9 @@ trade_state = {
     "pending_direction": None,   # 🔹 used for Strategy A (levels mode)
     "pending_timeframe": None,
     "pending_symbol": None,
-    "pending_sl": 0
+    "pending_sl": 0,
+    "tp1_filled": False,
+    "be_active": False
 }
 
 
@@ -278,12 +280,19 @@ def start_userhub():
                         "direction": None,
                         "entry_price": None,
                         "entry_size": 0,
+                        "account_id": None,
                         "tp_orders": [],
                         "sl_order": None,
                         "be_price": None,
+                        "be_active": False,
                         "opened_at": None,
                         "closed_at": datetime.now(ZoneInfo("America/Los_Angeles")).isoformat(),
-                        "brackets_set": False
+                        "brackets_set": False,
+                        "pending_direction": None,
+                        "pending_timeframe": None,
+                        "pending_symbol": None,
+                        "pending_sl": 0,
+                        "tp1_filled": False
                     })
                 else:
                     print("[Topstep] Position close event received, but no active trade tracked.")
@@ -322,7 +331,7 @@ def start_userhub():
                     if not pending_dir:
                         log_message("[Trade] No pending direction stored. Skipping bracket placement.")
                         return
-                    print("LINE 293")
+
                     # Load cached structure (fast, no API calls)
                     # quick_refresh(settings["contractId"], settings["token"], "1m")
                     cache = get_cached_structures("1m")
@@ -376,7 +385,6 @@ def start_userhub():
                     # Place TP/SL bracket orders
                     # ============================================================
                     if pending_dir == "bullish":
-                        print("PLACING TPS/SL")
                         # TP1 Sell Limit
                         tp1_resp = place_order(account_id, contract_id, 1, tp1_contracts,
                                             0, 0, token, price=tp1_price, order_type=1)
@@ -409,9 +417,22 @@ def start_userhub():
 
                     # Clear pending
                     trade_state["pending_direction"] = None
+                    
+                    log_message(f"[Trade] Brackets placed → SL={sl_price} | BE={trade_state["be_price"]} | TP1={tp1_price} | TP2={tp2_price}")
+                    placed_at = datetime.now(ZoneInfo("America/Los_Angeles")).isoformat()
 
-                    log_message(f"[Trade] Brackets placed → SL={sl_price} | TP1={tp1_price} | TP2={tp2_price}")
+                    trade_id = create_trade(
+                        placed_at=placed_at,
+                        account=settings.get("account", settings.get("accountId", "")),
+                        symbol=settings["contractName"],
+                        timeframe=trade_state.get("timeframe", "1m"),
+                        entry_price=entry_price,
+                        stoploss_price=sl_price
+                    )
 
+                    trade_state["trade_id"] = trade_id
+
+                    log_message(f"[Trade] Database record created → trade_id={trade_id}")
                     return
                 else:
                     # Existing position adjusted (scaled in or partial reduction)
@@ -478,11 +499,12 @@ def start_userhub():
                             token=settings["token"],
                             stop_price=trade_state["entry_price"]
                         )
+                        trade_state["be_active"] = True
                         if modify_resp.get("success"):
                             log_message(f"[Topstep] SL size updated → {remaining_size} contracts and moved to breakeven after TP1 fill.")
                         else:
                             log_message(f"[Topstep] Failed to modify SL size or move stoploss to breakeven: {modify_resp}")
-                    elif settings["beMethod"] == "":
+                    else:
                         modify_resp = modify_order(
                             account_id=account_id,
                             order_id=trade_state["sl_order"],
@@ -493,12 +515,77 @@ def start_userhub():
                            log_message(f"[Topstep] SL size updated → {remaining_size} contracts after TP1 fill.")
                         else:
                            log_message(f"[Topstep] Failed to modify SL size: {modify_resp}")
+                    # --- DB UPDATE: TP1 HIT ---
+                    trade_state["tp1_filled"] = True
+                    trade_id = trade_state.get("trade_id")
+                    if trade_id:
+                        update_trade(
+                            trade_id,
+                            tp1_filled_price=data.get("averagePrice"),
+                            tp1_hit=1,
+                            result="win"
+                        )
+                        log_message(f"[Trade] TP1 update saved → trade_id={trade_id}")
 
                     trade_state["be_price"] = None
+                    return
 
 
                 except Exception as e:
                     log_message(f"[UserHub] Error modifying SL after TP1 fill: {e}")
+
+            # --- CASE 2: TP2 filled (full take profit = WIN) ---
+            if len(tp_orders) >= 2 and order_id == tp_orders[1]:
+                log_message(f"[Topstep] TP2 filled (order {order_id}). Full take profit reached.")
+
+                trade_id = trade_state.get("trade_id")
+                if trade_id:
+                    update_trade(
+                        trade_id,
+                        tp2_filled_price=data.get("averagePrice"),
+                        tp2_hit=1,
+                        result="win"
+                    )
+                    log_message(f"[Trade] WIN recorded → trade_id={trade_id}")
+                trade_state["be_active"] = False
+                # Do NOT modify SL here. TP2 means trade is DONE.
+                return
+            
+            # --- CASE 3: Stoploss filled ---
+            if order_id == sl_order:
+
+                trade_id = trade_state.get("trade_id")
+                be_active = trade_state.get("be_active", False)
+
+                # BE METHOD = FIRST
+                if settings["beMethod"] == "first":
+                    if trade_state.get("tp1_filled"):
+                        # TP1 guarantees a win even if SL later hits at BE
+                        result = "win"
+                    elif be_active:
+                        # BE triggered before TP1 → breakeven result
+                        result = "be"
+                    else:
+                        # Stoploss hit with no BE and no TP1 → full loss
+                        result = "lose"
+
+
+                # BE METHOD = TP1
+                elif settings["beMethod"] == "tp1":
+                    if trade_state.get("tp1_filled"):
+                        result = "win"
+                    else:
+                        result = "lose"
+
+                # Update DB
+                if trade_id:
+                    update_trade(trade_id, result=result)
+                    log_message(f"[Trade] Result recorded → {result} | trade_id={trade_id}")
+                    
+                trade_state["be_active"] = False
+                log_message(f"[Trade] SL fill → result={result} → trade_id={trade_id}")
+
+                return
 
         connection.on_open(on_open)
         connection.on_close(on_close)
@@ -718,7 +805,7 @@ def start():
                     
                 # 🔹 Start background refresher
                 start_cache_refresher(contract_id, token, stop_event)
-                log_message("[LevelsCache] Background refresher started (30s updates).")
+                log_message("[LevelsCache] Background refresher started")
 
             except Exception as e:
                 log_message(f"[LevelsCache] Error preloading 1m cache: {e}")
@@ -1031,30 +1118,30 @@ def breakeven_monitor():
     while not stop_event.is_set():
         # Only check when a trade is active AND brackets exist
         if not trade_state.get("active"):
-            if stop_event.wait(3):
+            if stop_event.wait(2):
                 break
             continue
 
         be_price = trade_state.get("be_price")
         if not be_price:
-            if stop_event.wait(3):
+            if stop_event.wait(2):
                 break
             continue
     
         sl_order = trade_state.get("sl_order")
         if not sl_order:
             print("[BE] SL order not yet available, skipping this cycle.")
-            if stop_event.wait(3):
+            if stop_event.wait(2):
                 break
             continue
-        bar = get_3sec_bar(settings["contractId"], settings["token"])
+        bar = get_2sec_bar(settings["contractId"], settings["token"])
         if not bar:
-            if stop_event.wait(3):
+            if stop_event.wait(2):
                 break
             continue
         high = float(bar["high"])
         low = float(bar["low"])
-        
+
         direction = trade_state.get("direction")
         entry_price = trade_state.get("entry_price")
         entry_size = trade_state.get("entry_size")
@@ -1071,6 +1158,7 @@ def breakeven_monitor():
             )
 
             trade_state["be_price"] = None
+            trade_state["be_active"] = True
             continue
 
         # --- SHORT ---
@@ -1085,9 +1173,10 @@ def breakeven_monitor():
             )
 
             trade_state["be_price"] = None
+            trade_state["be_active"] = True
             continue
 
-        time.sleep(2)
+        time.sleep(1)
 
 
 def macro_time_tracker():

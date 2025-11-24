@@ -2,7 +2,7 @@
 
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from levels import retrieve_bars, detect_swings, detect_fvg
 
@@ -270,9 +270,9 @@ def _incremental_refresh(contract_id, token, tf_key: str):
             "meta": existing["meta"],
             "last_update": datetime.now(timezone.utc)
         }
-    print("Incremental new bars:", len(new_bars))
-    print("Total swing highs:", len(updated_highs))
-    print("Total swing lows:", len(updated_lows))
+    # print("Incremental new bars:", len(new_bars))
+    # print("Total swing highs:", len(updated_highs))
+    # print("Total swing lows:", len(updated_lows))
     # Debug: print last 5 swing highs and lows
     print("Last 5 swing highs:")
     for h in updated_highs[-5:]:
@@ -348,30 +348,35 @@ def quick_refresh(contract_id, token, tf_key="1m"):
 
 
 def start_cache_refresher(contract_id, token, stop_event):
+    TARGET_OFFSET = 59.8
 
     def _refresh_loop():
-        print("[LevelsCache] Background refresher started.")
+        print("[LevelsCache] Background Refresher started.")
 
         while not stop_event.is_set():
-
             now = datetime.now(timezone.utc)
-            sec = now.second
 
-            # sleep until we hit :58 OR the next :58
-            if sec <= 58:
-                wait_time = 58 - sec
-            else:
-                # if it's 59 or 00, wait until next minute's :58
-                wait_time = 60 - sec + 58
+            # Target time inside THIS minute
+            current_minute = now.replace(second=0, microsecond=0)
+            target_time = current_minute + timedelta(seconds=TARGET_OFFSET)
 
-            if stop_event.wait(wait_time):
+            # If it's already passed, move to NEXT minute
+            if target_time <= now:
+                target_time = current_minute + timedelta(minutes=1, seconds=TARGET_OFFSET)
+
+            sleep_secs = (target_time - now).total_seconds()
+
+            # print(f"[LevelsCache] Next tick scheduled in {sleep_secs:.3f}s → target={target_time.isoformat()}")
+
+            if stop_event.wait(sleep_secs):
                 break
 
-            # Now it's :58 — fetch new bars
+            # print(f"[LevelsCache] Refresh tick at {datetime.now(timezone.utc).isoformat()} (offset={TARGET_OFFSET}s)")
+
             try:
                 ok = _incremental_refresh(contract_id, token, "1m")
                 if not ok:
-                    print("[LevelsCache] Incremental failed, rebuilding cache.")
+                    print("[LevelsCache] Incremental failed → full rebuild")
                     _build_timeframe_cache(contract_id, token, "1m")
             except Exception as e:
                 print(f"[LevelsCache] Refresher error: {e}")
@@ -383,6 +388,7 @@ def start_cache_refresher(contract_id, token, stop_event):
     t = threading.Thread(target=_refresh_loop, daemon=True)
     t.start()
     return t
+
 
 
 

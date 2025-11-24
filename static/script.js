@@ -493,11 +493,12 @@ document.getElementById("analytics-calc-btn").onclick = async function () {
         const data = await res.json();
 
         // update results card
-        document.getElementById("res-winrate").innerText = data.win_rate;
+        document.getElementById("res-winrate").innerText = data.win_rate + "%";
         document.getElementById("res-rr").innerText = data.avg_rr;
         document.getElementById("res-trades").innerText = data.total_trades;
         document.getElementById("res-wins").innerText = data.wins;
         document.getElementById("res-losses").innerText = data.losses;
+        document.getElementById("res-be").innerText = data.breakeven;
 
         // hide inputs, show results
         document.getElementById("analytics-inputs").style.display = "none";

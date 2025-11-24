@@ -1,7 +1,7 @@
 import sqlite3
 from threading import Lock
 
-DB_PATH = "nezo_trades.db"
+DB_PATH = "db_trades.db"
 db_lock = Lock()
 
 def init_db():
@@ -137,7 +137,9 @@ def calculate_analytics(filters):
     losses = sum(1 for t in trades if t["result"] == "lose")
     total = len(trades)
 
-    win_rate = (wins / total * 100) if total > 0 else 0
+
+    win_rate = (wins / (wins + losses) * 100) if total > 0 else 0
+    be = sum(1 for t in trades if t["result"] == "be")
 
     # calculate R:R average
     rr_list = []
@@ -170,5 +172,6 @@ def calculate_analytics(filters):
         "avg_rr": round(avg_rr, 2),
         "total_trades": total,
         "wins": wins,
-        "losses": losses
+        "losses": losses,
+        "breakeven": be
     }
