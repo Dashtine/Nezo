@@ -8,7 +8,7 @@ Nezo is a full-stack automated futures trading platform built with Python and Fl
 
 Nezo includes a browser-based dashboard for managing connection settings, presets, trading parameters, session controls, and live operational logs.
 
-![Nezo dashboard in dark mode](docs/nezo-dashboard-dark.png)
+![Nezo dashboard in dark mode](docs/nezo-dark.png)
 
 ## At a Glance
 
