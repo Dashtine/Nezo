@@ -4,6 +4,12 @@
 
 Nezo is a full-stack automated futures trading platform built with Python and Flask. It receives TradingView-style signals, validates trading state, integrates with TopstepX for order execution, manages bracket orders and break-even behavior, caches market structure for faster decisions, and records trade history for analytics.
 
+## Dashboard Preview
+
+Nezo includes a browser-based dashboard for managing connection settings, presets, trading parameters, session controls, and live operational logs.
+
+![Nezo dashboard in dark mode](docs/nezo-dashboard-dark.png)
+
 ## At a Glance
 
 | Area | Details |
