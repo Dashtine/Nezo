@@ -1,8 +1,18 @@
 # Nezo
 
+[![Tests](https://github.com/Dashtine/Nezo/actions/workflows/tests.yml/badge.svg)](https://github.com/Dashtine/Nezo/actions/workflows/tests.yml)
+
 Nezo is a full-stack automated futures trading platform built with Python and Flask. It receives TradingView-style signals, validates trading state, integrates with TopstepX for order execution, manages bracket orders and break-even behavior, caches market structure for faster decisions, and records trade history for analytics.
 
-This project was built as an end-to-end engineering project focused on real-time integrations, reliability, state management, and production-style backend workflows.
+## At a Glance
+
+| Area | Details |
+|---|---|
+| Backend | Python, Flask, Requests, SQLite |
+| Real-time | SignalR position, order, and trade events |
+| Integrations | TopstepX REST API, TopstepX SignalR hub, TradingView-style webhooks |
+| Reliability | duplicate-order protection, position guards, bracket cleanup, session controls |
+| Data | rolling market-data cache, swing/FVG detection, trade analytics |
 
 ## Engineering Highlights
 
@@ -18,25 +28,31 @@ This project was built as an end-to-end engineering project focused on real-time
 
 ## Architecture
 
-```text
-TradingView / Signal Source
-          |
-          v
-   Flask Webhook API
-          |
-          +--> Validation + trade-state guards
-          |
-          +--> Market structure / cached levels
-          |
-          +--> TopstepX REST API ------> Orders / account data
-          |
-          +--> SignalR User Hub ------> Live position/order updates
-          |
-          +--> SQLite ---------------> Trade history / analytics
-          |
-          v
-      Web Dashboard
+```mermaid
+flowchart TD
+    A[TradingView / Signal Source] --> B[Flask Webhook API]
+    B --> C[Validation + Trade-State Guards]
+    C --> D[Market Structure + Cached Levels]
+    C --> E[TopstepX REST API]
+    E --> F[Order Execution / Account Data]
+    F --> G[TopstepX SignalR User Hub]
+    G --> H[Live Position / Order Updates]
+    D --> I[Trade Management]
+    H --> I
+    I --> J[(SQLite Trade History / Analytics)]
+    I --> K[Web Dashboard]
 ```
+
+## What This Project Demonstrates
+
+Nezo is intended to show practical backend and integration engineering rather than just a trading strategy. The project demonstrates:
+
+- designing around asynchronous external APIs and real-time event streams
+- protecting order workflows from duplicate or conflicting state
+- using locking and cached data to reduce repeated network work
+- organizing trade state across REST requests, background threads, and SignalR callbacks
+- persisting and querying application data with SQLite
+- debugging edge cases across frontend, backend, and third-party integrations
 
 ## Main Modules
 
